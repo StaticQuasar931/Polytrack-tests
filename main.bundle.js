@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v9";
+  const MARKER = "polytrack-extension-inline-v10";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -43,6 +43,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   let firestorePromise = null;
   let rankingsSpawnedOnce = sessionStorage.getItem('polytrack-rankings-spawned') === '1';
   let localUploadCounter = Number(localStorage.getItem('polytrack-upload-counter') || '0') || 0;
+  const BRAND_FP = `${q0}${q1}${q2}${q3}`;
+  const WARN_FP = `${p0}${p1}`;
 
   function loadScript(src){
     return new Promise((resolve,reject)=>{
@@ -132,8 +134,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function setUnofficialMessage(){
     const warning = document.querySelector('.menu .warning-message');
     if (!warning) return;
-    const token = `${p0}${p1}`;
-    warning.dataset.k = token;
+    if (warning.dataset.k === WARN_FP) return;
+    warning.dataset.k = WARN_FP;
     warning.className = 'warning-message official-link';
     warning.innerHTML = '';
     const line1 = document.createElement('div');
@@ -153,7 +155,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function ensurePersistentInfoBranding(){
     const info = document.querySelector('.menu .info');
     if (!info) return;
-    info.dataset.fp = `${q0}${q1}${q2}${q3}`;
+    if (info.dataset.fp === BRAND_FP && info.querySelector('.staticFunPill')) return;
+    info.dataset.fp = BRAND_FP;
     info.innerHTML = '';
     const promo = document.createElement('a');
     promo.href = 'https://sites.google.com/view/staticquasar931/gm3z';
@@ -461,20 +464,30 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     ensurePersistentInfoBranding();
   }
 
-  const observer = new MutationObserver(() => {
+  function reconcileUI(){
     injectRankingsButton();
     injectHelpButton();
     setUnofficialMessage();
     ensurePersistentInfoBranding();
+  }
+
+  let reconcileScheduled = false;
+  const observer = new MutationObserver(() => {
+    if (reconcileScheduled) return;
+    reconcileScheduled = true;
+    requestAnimationFrame(() => {
+      reconcileScheduled = false;
+      reconcileUI();
+    });
   });
 
   function boot(){
     install();
-    observer.observe(document.documentElement, { childList:true, subtree:true });
-    setInterval(()=>{ setUnofficialMessage(); ensurePersistentInfoBranding(); injectRankingsButton(); injectHelpButton(); }, 2200);
+    observer.observe(document.body || document.documentElement, { childList:true, subtree:true });
+    setInterval(reconcileUI, 7000);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v9 */
+/* polytrack-extension-inline-v10 */
