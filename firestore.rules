@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public read for lock state and overall board (game clients)
+    match /app_state/lock {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /leaderboards/overall {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Never readable/writable by public clients
+    match /app_state/secrets {
+      allow read, write: if false;
+    }
+
+    // Default deny-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
