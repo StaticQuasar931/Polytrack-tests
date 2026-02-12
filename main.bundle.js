@@ -305,7 +305,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const path = urlObj.pathname;
     const isLegacyPath = path === '/user' || path === '/leaderboard';
     if (!isLegacyPath) return false;
-    return urlObj.host === 'vps.kodub.com' || urlObj.host === window.location.host;
+    return urlObj.host === 'vps.kodub.com';
   }
 
   function mockPayload(urlObj, method){
