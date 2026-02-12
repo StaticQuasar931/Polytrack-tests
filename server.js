@@ -200,10 +200,6 @@ async function handleApi(req, res, pathname, urlObj) {
   const results = Array.isArray(racesData.results) ? racesData.results : [];
   const tracks = Array.isArray(tracksData.tracks) ? tracksData.tracks : [];
 
-  if (req.method === "GET" && pathname === "/api/lock-status") {
-    return sendJson(res, 200, { locked: false }), true;
-  }
-
   if (req.method === "GET" && pathname === "/api/overall-leaderboard") {
     return sendJson(res, 200, { entries: computeOverall(results, tracks, 100) }), true;
   }
@@ -318,7 +314,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`Polytrack server running at http://${HOST}:${PORT}`);
   console.log("API routes:");
-  console.log("  GET  /api/lock-status");
   console.log("  GET  /api/overall-leaderboard");
   console.log("  GET  /api/leaderboard?trackId=");
   console.log("  POST /api/race-result");

@@ -95,6 +95,12 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       .staticFunHover:hover{transform:translateY(-2px) scale(1.05);filter:brightness(1.18);box-shadow:0 0 18px rgba(255,255,255,0.20),0 0 30px rgba(0,255,255,0.18)}
       .staticFunText{display:inline-block;white-space:nowrap;perspective:600px;animation:staticFloat 2.2s ease-in-out infinite}
       .staticFunChar{display:inline-block;will-change:transform,filter;transform-style:preserve-3d;animation:staticWave 1.6s ease-in-out infinite;background:linear-gradient(90deg,#66f,#6ff,#6f6,#ff6,#f6f,#66f);background-size:300% 100%;background-position:0% 50%;-webkit-background-clip:text;background-clip:text;color:transparent;animation-name:staticWave,staticSheen;animation-duration:1.6s,2.4s;animation-timing-function:ease-in-out,ease-in-out;animation-iteration-count:infinite,infinite}
+      #polytrackHelpPanel{display:none;position:fixed;z-index:10002;right:18px;top:18px;max-width:380px;background:rgba(17,22,45,.96);border:1px solid rgba(255,255,255,.2);padding:14px 14px 10px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+      #polytrackHelpPanel h3{margin:0 0 8px;font-size:24px;color:#9ad0ff;font-weight:normal}
+      #polytrackHelpPanel p{margin:0 0 8px;font-size:16px;line-height:1.3;color:rgba(255,255,255,.86)}
+      #polytrackHelpPanel .help-small{font-size:14px;color:rgba(255,255,255,.62)}
+      #polytrackHelpPanel a{color:#b7e2ff}
+      #polytrackHelpClose{margin-top:4px;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.08);color:#fff;padding:5px 10px;cursor:pointer}
       @keyframes staticGlowPulse{0%{box-shadow:0 0 0 rgba(255,255,255,0.0),0 0 10px rgba(0,255,255,0.12)}50%{box-shadow:0 0 14px rgba(255,255,255,0.18),0 0 22px rgba(255,0,255,0.18)}100%{box-shadow:0 0 0 rgba(255,255,255,0.0),0 0 10px rgba(0,255,255,0.12)}}
       @keyframes staticSheen{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
       @keyframes staticFloat{0%{transform:translateY(0) scale(1)}50%{transform:translateY(-1px) scale(1.01)}100%{transform:translateY(0) scale(1)}}
@@ -213,7 +219,14 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const listEl = document.getElementById('overallLeaderboardList');
     if (!listEl) return;
     if (!entries.length){
-      listEl.innerHTML = '<div class="overall-entry"><span class="overall-name">No rankings yet.</span></div>';
+      const placeholders = [
+        { rank:1, name:'Placeholder Driver', score:0.923, raceCount:12, totalTracks:20 },
+        { rank:2, name:'Sample Racer', score:0.947, raceCount:11, totalTracks:20 },
+        { rank:3, name:'Demo Pilot', score:0.968, raceCount:10, totalTracks:20 },
+        { rank:4, name:'Test Chassis', score:0.989, raceCount:9, totalTracks:20 },
+        { rank:5, name:'Ghost Entry', score:1.012, raceCount:8, totalTracks:20 }
+      ];
+      listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">Showing placeholder names and placeholder scores until real race data is available.</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
       return;
     }
     listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${entry.name}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
@@ -348,6 +361,32 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     };
   }
 
+
+  function ensureHelpPanel(){
+    if (document.getElementById('polytrackHelpPanel')) return;
+    const panel = document.createElement('div');
+    panel.id = 'polytrackHelpPanel';
+    panel.innerHTML = '<h3>Need help?</h3><p>Contact us through Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com">StaticQuasar931Games@gmail.com</a>.</p><p>Leave suggestions either way — we read both.</p><p class="help-small">Troubleshooting: refresh once after updates, allow storage, and check your internet if rankings do not load.</p><button id="polytrackHelpClose" type="button">Close</button>';
+    document.body.appendChild(panel);
+    panel.querySelector('#polytrackHelpClose').addEventListener('click', ()=>{ panel.style.display='none'; });
+  }
+
+  function injectHelpButton(){
+    const container = document.querySelector('.main-buttons-container');
+    if (!container || document.getElementById('injectedHelpBtn')) return;
+    const button = document.createElement('button');
+    button.id = 'injectedHelpBtn';
+    button.className = 'button button-image';
+    button.innerHTML = '<img src="images/discord.svg"><p>Help</p>';
+    button.addEventListener('click', (event)=>{
+      event.preventDefault();
+      event.stopPropagation();
+      const panel = document.getElementById('polytrackHelpPanel');
+      if (panel) panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    });
+    container.appendChild(button);
+  }
+
   function injectRankingsButton(){
     const container = document.querySelector('.main-buttons-container');
     if (!container || document.getElementById('injectedRankingsBtn')) return;
@@ -371,14 +410,17 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function install(){
     ensureStyles();
     ensurePanel();
+    ensureHelpPanel();
     hookLegacyNetworking();
     injectRankingsButton();
+    injectHelpButton();
     setUnofficialMessage();
     ensurePersistentInfoBranding();
   }
 
   const observer = new MutationObserver(() => {
     injectRankingsButton();
+    injectHelpButton();
     setUnofficialMessage();
     ensurePersistentInfoBranding();
   });
@@ -386,7 +428,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function boot(){
     install();
     observer.observe(document.documentElement, { childList:true, subtree:true });
-    setInterval(()=>{ setUnofficialMessage(); ensurePersistentInfoBranding(); injectRankingsButton(); }, 2200);
+    setInterval(()=>{ setUnofficialMessage(); ensurePersistentInfoBranding(); injectRankingsButton(); injectHelpButton(); }, 2200);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
