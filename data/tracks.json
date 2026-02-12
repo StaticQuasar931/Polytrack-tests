@@ -1,28 +1,3 @@
 {
-  "tracks": [
-    {
-      "trackId": "summer1",
-      "title": "Summer Sprint",
-      "author": "Official",
-      "category": "official",
-      "data": "",
-      "updatedAt": 1730000000000
-    },
-    {
-      "trackId": "winter1",
-      "title": "Winter Hollow",
-      "author": "Official",
-      "category": "official",
-      "data": "",
-      "updatedAt": 1730000000000
-    },
-    {
-      "trackId": "custom_city",
-      "title": "Custom City",
-      "author": "Static",
-      "category": "custom",
-      "data": "",
-      "updatedAt": 1770855869417
-    }
-  ]
+  "tracks": []
 }

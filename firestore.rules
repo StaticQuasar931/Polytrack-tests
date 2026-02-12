@@ -1,27 +1,51 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Overall ranking document (public read)
+    function validName(name) {
+      return name is string && name.size() >= 1 && name.size() <= 24;
+    }
+
+    // Public read leaderboards
     match /leaderboards_overall/main {
       allow read: if true;
       allow write: if false;
     }
 
-    // Per-track boards (public read)
     match /leaderboards_tracks/{trackId} {
       allow read: if true;
       allow write: if false;
     }
 
-    // Published tracks list (public read)
-    match /tracks_catalog/{trackId} {
+    // Player profile and name history
+    match /players/{accountId} {
       allow read: if true;
-      allow write: if false;
+      allow create, update: if request.resource.data.accountId == accountId
+        && validName(request.resource.data.name)
+        && request.resource.data.updatedAt is int;
+      allow delete: if false;
+
+      match /name_history/{historyId} {
+        allow read: if false;
+        allow create: if validName(request.resource.data.name)
+          && request.resource.data.updatedAt is int;
+        allow update, delete: if false;
+      }
     }
 
-    // Raw race result archive (disabled from public clients)
+    // Incoming race submissions
     match /race_results/{resultId} {
-      allow read, write: if false;
+      allow read: if false;
+      allow create: if request.resource.data.trackId is string
+        && request.resource.data.trackId.size() >= 1
+        && request.resource.data.trackId.size() <= 64
+        && request.resource.data.accountId is string
+        && request.resource.data.accountId.size() >= 1
+        && request.resource.data.accountId.size() <= 128
+        && validName(request.resource.data.name)
+        && request.resource.data.timeMs is number
+        && request.resource.data.timeMs > 0
+        && request.resource.data.createdAt is int;
+      allow update, delete: if false;
     }
 
     // Default deny-all

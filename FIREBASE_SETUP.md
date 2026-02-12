@@ -1,22 +1,23 @@
-# Firebase setup (Hosting + Firestore, free plan compatible)
+# Firebase setup (Hosting + Firestore, no Functions)
 
 Project:
 - Project ID: `polytrack-052`
 - Web App ID: `1:1000092276003:web:dbde7b8770d345f1ea6896`
 
-## Firestore collections used
+## Collections used by current build
 
-- `leaderboards_overall/main`
-  - `entries: [{ rank, name, score, raceCount, totalTracks }]`
-- `leaderboards_tracks/{trackId}`
-  - `entries: [{ rank, name, timeMs, userId, attempts, updatedAt }]`
-- `tracks_catalog/{trackId}`
-  - `title, author, category, updatedAt`
-- `race_results/{docId}` *(optional archival / analytics)*
+1. `leaderboards_overall/main`
+   - `entries: [{ rank, name, score, raceCount, totalTracks }]`
+2. `leaderboards_tracks/{trackId}`
+   - `entries: [{ rank, name, timeMs, userId, attempts, updatedAt }]`
+3. `players/{accountId}`
+   - `accountId, name, updatedAt`
+4. `players/{accountId}/name_history/{historyId}`
+   - `name, updatedAt, replaced`
+5. `race_results/{resultId}`
+   - `trackId, accountId, name, timeMs, createdAt, source`
 
-## Rules to deploy
-
-Use the `firestore.rules` file in this repo.
+## Rules to deploy (direct)
 
 Deploy command:
 
@@ -24,15 +25,18 @@ Deploy command:
 firebase deploy --only firestore:rules
 ```
 
+The rules in this repo do all of the following:
+- public read of leaderboard documents
+- controlled client writes for `race_results` and `players` documents
+- deny-all fallback for everything else
+
 ## Hosting deploy
 
 ```bash
 firebase deploy --only hosting
 ```
 
-## Important operational note
+## Notes
 
-For this public project:
-- Keep client writes disabled in Firestore rules.
-- Update leaderboard and track docs from Firebase Console (or trusted backend tooling later).
-- If you later add authenticated submissions, we can add a moderated queue with strict validation rules.
+- Since this is Functions-free, leaderboard aggregation docs (`leaderboards_overall`, `leaderboards_tracks`) should be updated by your trusted process/tooling.
+- Player name sanitization + history logging is already handled client-side before writes.
