@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v8";
+  const MARKER = "polytrack-extension-inline-v9";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -72,6 +72,25 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       return app.firestore();
     })();
     return firestorePromise;
+  }
+
+  async function ensureFirestoreBootstrap(){
+    try {
+      const d = await db();
+      await d.collection('system').doc('bootstrap').set({
+        projectId: FIREBASE_CONFIG.projectId,
+        runtime: MARKER,
+        updatedAt: Date.now(),
+        source: window.location.origin
+      }, { merge: true });
+      const overallRef = d.collection('leaderboards_overall').doc('main');
+      const snap = await overallRef.get();
+      if (!snap.exists) {
+        await overallRef.set({ entries: [], updatedAt: Date.now(), seededBy: MARKER }, { merge: true });
+      }
+    } catch (error) {
+      console.warn('Firestore bootstrap failed:', error);
+    }
   }
 
   function ensureStyles(){
@@ -297,8 +316,28 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   function parsePayload(raw){
     if (!raw) return null;
-    try { return JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); }
-    catch { return null; }
+    if (typeof raw === 'object' && !(raw instanceof ArrayBuffer) && !(raw instanceof Uint8Array)) {
+      if (typeof FormData !== 'undefined' && raw instanceof FormData) {
+        const out = {};
+        for (const [k,v] of raw.entries()) out[k] = typeof v === 'string' ? v : String(v);
+        return out;
+      }
+      if (raw instanceof URLSearchParams) {
+        const out = {};
+        for (const [k,v] of raw.entries()) out[k] = v;
+        return out;
+      }
+      return raw;
+    }
+    try {
+      const decoded = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
+      if (decoded.includes('=') && !decoded.trim().startsWith('{')) {
+        const out = {};
+        for (const [k,v] of new URLSearchParams(decoded).entries()) out[k] = v;
+        if (Object.keys(out).length) return out;
+      }
+      return JSON.parse(decoded);
+    } catch { return null; }
   }
 
   async function mirrorRaceResult(url, body){
@@ -310,20 +349,23 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const name = String(payload.name || payload.nickname || 'Player').slice(0,24);
       const timeMs = Number(payload.timeMs || payload.time || payload.total || payload.frames || 0);
       if (!accountId || !trackId || !Number.isFinite(timeMs) || timeMs <= 0) return;
+      const createdAt = Date.now();
       await d.collection('race_results').add({
         accountId,
         trackId,
         name,
         timeMs,
         replay: payload.replay || payload.replayData || null,
-        replayHash: String(payload.replayHash || '').slice(0,128) || null,
+        replayHash: String(payload.replayHash || payload.uploadId || '').slice(0,128) || null,
         carId: String(payload.car || payload.carId || payload.carName || '').slice(0,64) || null,
         carColors: String(payload.carColors || payload.CarColors || '').slice(0,64) || null,
-        raceTimeFrames: Number(payload.frames || 0) || null,
+        raceTimeFrames: Number(payload.frames || payload.numberOfFrames || 0) || null,
         uploadId: Number(payload.uploadId) || null,
-        createdAt: Date.now(),
+        verified: Boolean(payload.isVerified ?? payload.verified ?? false),
+        createdAt,
         source: String(url || '').slice(0,500)
       });
+      await d.collection('system').doc('last_race_ingest').set({ accountId, trackId, timeMs, updatedAt: createdAt }, { merge: true });
     } catch (error) { console.warn('Race mirror failed:', error); }
   }
 
@@ -412,6 +454,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     ensurePanel();
     ensureHelpPanel();
     hookLegacyNetworking();
+    ensureFirestoreBootstrap();
     injectRankingsButton();
     injectHelpButton();
     setUnofficialMessage();
@@ -434,4 +477,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v8 */
+/* polytrack-extension-inline-v9 */
