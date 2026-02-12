@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v12";
+  const MARKER = "polytrack-extension-inline-v13";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -319,11 +319,11 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function makeLeaderboardPayload(method){
     const base = {
       entries: [],
-      total: 0,
-      Total: 0,
-      position: 0,
-      newPosition: 0,
-      previousPosition: 0,
+      total: 1,
+      Total: 1,
+      position: 1,
+      newPosition: 1,
+      previousPosition: 1,
       positionChange: 0,
       uploadId: null
     };
@@ -453,6 +453,9 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const existing = container.querySelectorAll('button.button-image');
       button.style.animationDelay = (0.3 + existing.length * 0.1).toFixed(1) + 's';
       rankingsSpawnedOnce = true;
+    } else {
+      button.classList.remove('button-spawn');
+      button.style.animation = 'none';
     }
     button.innerHTML = '<img src="images/trophy.svg"><p>Rankings</p>';
     button.addEventListener('click', (event)=>{ event.preventDefault(); event.stopPropagation(); openPanel(); });
@@ -496,4 +499,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v12 */
+/* polytrack-extension-inline-v13 */
