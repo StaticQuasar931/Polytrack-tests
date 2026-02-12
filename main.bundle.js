@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v11";
+  const MARKER = "polytrack-extension-inline-v12";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -106,8 +106,16 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       .overall-top{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:2px solid rgba(255,255,255,.14)}
       .overall-top h2{margin:0;font-size:40px;font-weight:normal;color:#8ec7ff}
       .overall-sub{margin:0;padding:0 22px 14px;color:rgba(255,255,255,.72);font-size:18px}
-      #closeOverallLeaderboard{cursor:pointer;font-size:18px;border:1px solid rgba(255,85,85,.6);background:rgba(255,85,85,.1);padding:8px 12px;color:#ff8b8b}
+      #closeOverallLeaderboard,#overallHelpBtn{cursor:pointer;font-size:17px;border:1px solid rgba(142,199,255,.45);background:rgba(20,35,75,.55);padding:8px 12px;color:#bde2ff;transition:transform .12s ease, filter .12s ease}
+      #closeOverallLeaderboard:hover,#overallHelpBtn:hover{transform:translateY(-1px);filter:brightness(1.1)}
       #overallLeaderboardList{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
+      #overallHelpPopup{display:none;position:absolute;inset:0;background:rgba(9,13,30,.78);backdrop-filter:blur(2px);align-items:center;justify-content:center;z-index:3}
+      .overall-help-card{max-width:560px;background:linear-gradient(180deg,#24305f,#1a244b);border:1px solid rgba(255,255,255,.2);padding:16px 18px;box-shadow:0 12px 28px rgba(0,0,0,.4)}
+      .overall-help-card h3{margin:0 0 8px;font-size:28px;color:#9ed5ff;font-weight:normal}
+      .overall-help-card p{margin:0 0 8px;font-size:16px;color:rgba(255,255,255,.85);line-height:1.35}
+      .overall-help-card .small{font-size:14px;color:rgba(255,255,255,.65)}
+      .overall-help-actions{display:flex;justify-content:flex-end;margin-top:8px}
+      #overallHelpClose{cursor:pointer;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:7px 12px}
       .overall-entry{display:flex;align-items:center;padding:12px;background:var(--surface-tertiary-color,#192042);border:1px solid rgba(255,255,255,.08);opacity:0;transform:translateY(8px);animation:overallEntryIn .26s ease forwards}
       .overall-entry.top-3{border-color:rgba(255,217,89,.7);background:linear-gradient(90deg,rgba(255,217,89,.14),rgba(25,32,66,.9))}
       .overall-rank{width:72px;text-align:center;font-size:28px;color:#82beff}
@@ -142,7 +150,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     warning.className = 'warning-message official-link';
     warning.innerHTML = '';
     const line1 = document.createElement('div');
-    line1.textContent = 'This is an unofficial community recreation.';
+    line1.textContent = 'This is an unofficial community recreation made by fans.';
     const line2 = document.createElement('div');
     line2.append('Play the official version at ');
     const link = document.createElement('a');
@@ -211,13 +219,17 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (document.getElementById('overallLeaderboardPanel')) return;
     const panel = document.createElement('div');
     panel.id = 'overallLeaderboardPanel';
-    panel.innerHTML = '<div class="overall-shell"><div class="overall-top"><h2>Overall Rankings</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" type="button">Help</button><button id="closeOverallLeaderboard" type="button">Close</button></div></div><p class="overall-sub">Performance score across all tracks. Lower is better.</p><div id="overallHelpText" style="display:none;padding:0 22px 10px;color:rgba(255,255,255,.75);font-size:15px">Contact us via Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>. Leave suggestions either way.</div><div id="overallLeaderboardList"></div></div>';
+    panel.innerHTML = '<div class="overall-shell" style="position:relative"><div class="overall-top"><h2>Overall Rankings</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" type="button">Help</button><button id="closeOverallLeaderboard" type="button">Close</button></div></div><p class="overall-sub">Performance score across all tracks. Lower is better (1.000 is best).</p><div id="overallLeaderboardList"></div><div id="overallHelpPopup"><div class="overall-help-card"><h3>Rankings Help</h3><p>Need help? Contact us via Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>.</p><p>Suggestions are welcome through either method.</p><p class="small">Troubleshooting: refresh after updates, ensure storage is enabled, and verify network access if rankings do not update.</p><div class="overall-help-actions"><button id="overallHelpClose" type="button">Close</button></div></div></div></div>';
     document.body.appendChild(panel);
     panel.addEventListener('click', (event)=>{ if (event.target === panel) panel.style.display='none'; });
     panel.querySelector('#closeOverallLeaderboard').addEventListener('click', ()=>{ panel.style.display='none'; });
     panel.querySelector('#overallHelpBtn').addEventListener('click', ()=>{
-      const help = panel.querySelector('#overallHelpText');
-      if (help) help.style.display = help.style.display === 'none' ? 'block' : 'none';
+      const pop = panel.querySelector('#overallHelpPopup');
+      if (pop) pop.style.display = 'flex';
+    });
+    panel.querySelector('#overallHelpClose').addEventListener('click', ()=>{
+      const pop = panel.querySelector('#overallHelpPopup');
+      if (pop) pop.style.display = 'none';
     });
   }
 
@@ -310,6 +322,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       total: 0,
       Total: 0,
       position: 0,
+      newPosition: 0,
       previousPosition: 0,
       positionChange: 0,
       uploadId: null
@@ -483,4 +496,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v11 */
+/* polytrack-extension-inline-v12 */
