@@ -10,9 +10,6 @@ const DATA_DIR = path.join(ROOT, "data");
 const LOCK_STATE_FILE = path.join(DATA_DIR, "lock-state.json");
 const LEADERBOARD_FILE = path.join(DATA_DIR, "overall-leaderboard.json");
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
-const LOCAL_UNLOCK_PASSWORD = process.env.LOCAL_UNLOCK_PASSWORD || "";
-
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
@@ -143,51 +140,7 @@ function serveStatic(req, res, pathname) {
 
 async function handleApi(req, res, pathname) {
   if (req.method === "GET" && pathname === "/api/lock-status") {
-    const state = readJson(LOCK_STATE_FILE, { locked: false });
-    sendJson(res, 200, { locked: Boolean(state.locked) });
-    return true;
-  }
-
-  if (req.method === "POST" && pathname === "/api/verify-local-unlock") {
-    let body;
-    try {
-      body = await parseRequestBody(req);
-    } catch (error) {
-      sendJson(res, 400, { valid: false, error: error.message });
-      return true;
-    }
-
-    const provided = String(body.password || "");
-    const valid = LOCAL_UNLOCK_PASSWORD.length > 0 && provided === LOCAL_UNLOCK_PASSWORD;
-    sendJson(res, 200, { valid });
-    return true;
-  }
-
-  if (req.method === "POST" && pathname === "/api/lock") {
-    let body;
-    try {
-      body = await parseRequestBody(req);
-    } catch (error) {
-      sendJson(res, 400, { success: false, error: error.message });
-      return true;
-    }
-
-    const providedPassword = String(body.password || "");
-    const action = body.action;
-
-    if (!["lock", "unlock"].includes(action)) {
-      sendJson(res, 400, { success: false, error: "action must be 'lock' or 'unlock'" });
-      return true;
-    }
-
-    if (ADMIN_PASSWORD.length === 0 || providedPassword !== ADMIN_PASSWORD) {
-      sendJson(res, 200, { success: false });
-      return true;
-    }
-
-    const nextState = { locked: action === "lock" };
-    writeJson(LOCK_STATE_FILE, nextState);
-    sendJson(res, 200, { success: true });
+    sendJson(res, 200, { locked: false });
     return true;
   }
 
@@ -227,7 +180,5 @@ server.listen(PORT, HOST, () => {
   console.log(`Polytrack server running at http://${HOST}:${PORT}`);
   console.log("API routes:");
   console.log("  GET  /api/lock-status");
-  console.log("  POST /api/verify-local-unlock");
-  console.log("  POST /api/lock");
   console.log("  GET  /api/overall-leaderboard");
 });

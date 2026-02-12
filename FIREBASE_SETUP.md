@@ -1,92 +1,61 @@
-# Firebase setup for PolyTrack API routes
+# Firebase setup (Hosting + Firestore only, no Functions)
 
-This project now includes a local same-origin API server (`server.js`) with the routes your frontend expects:
+This setup matches your Firebase free-plan constraint: **no Cloud Functions**.
 
-- `GET /api/lock-status`
-- `POST /api/verify-local-unlock`
-- `POST /api/lock`
-- `GET /api/overall-leaderboard`
+Project:
+- **Project ID:** `polytrack-052`
+- **Web App ID:** `1:1000092276003:web:dbde7b8770d345f1ea6896`
 
-If you want this on Firebase (recommended for production), set up **Firebase Hosting + Cloud Functions + Firestore**.
+## 1) Enable Firestore
 
-## 1) Create Firebase project
+In Firebase Console:
+1. Build -> Firestore Database
+2. Create database (Native mode)
+3. Pick region close to players
 
-1. Go to Firebase Console.
-2. Create/select your project.
-3. Enable:
-   - **Firestore (Native mode)**
-   - **Functions**
-   - **Hosting**
+## 2) Create leaderboard document
 
-## 2) Install CLI and init
+Create this document in Firestore:
 
-```bash
-npm i -g firebase-tools
-firebase login
-firebase init functions hosting firestore
-```
+- Collection: `leaderboards`
+- Document: `overall`
+- Field: `entries` (array)
 
-Choose:
-- Functions: JavaScript or TypeScript (your choice)
-- Hosting public dir: `.` (or your build dir)
-- Single-page app: `No` (you are serving real static files)
-
-## 3) Hosting rewrite to same-origin API
-
-In `firebase.json`, configure:
+Each array item shape:
 
 ```json
 {
-  "hosting": {
-    "public": ".",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [
-      {
-        "source": "/api/**",
-        "function": "api"
-      }
-    ]
-  }
+  "rank": 1,
+  "name": "GhostDriver",
+  "averageRank": 1.42,
+  "raceCount": 18,
+  "totalTracks": 20
 }
 ```
 
-That keeps frontend calls like `/api/lock-status` same-origin.
+## 3) Deploy Firestore rules
 
-## 4) Firestore document layout
+Use the `firestore.rules` file in this repo.
 
-Use this minimal schema:
-
-- `app_state/lock`
-  - `locked: boolean`
-  - `updatedAt: serverTimestamp`
-- `app_state/secrets`
-  - `adminPasswordHash: string`
-  - `localUnlockPasswordHash: string`
-- `leaderboards/overall`
-  - `entries: array<{ rank, name, averageRank, raceCount, totalTracks }>`
-  - `updatedAt: serverTimestamp`
-
-> Store password hashes, never plain text.
-
-## 5) Firestore Rules (starter)
-
-Use `firestore.rules` in this repo as your baseline.
-
-## 6) Deploy
+Deploy command:
 
 ```bash
-firebase deploy --only functions,hosting,firestore:rules
+firebase deploy --only firestore:rules
 ```
 
-## 7) Environment/secrets
+## 4) Deploy hosting
 
-For Functions v2, use Secret Manager or env config for salt/pepper values used in password hashing.
+```bash
+firebase deploy --only hosting
+```
 
-## 8) What you should send me next
+## 5) How updates should be done (safe/public project)
 
-Send these once ready and I can wire your exact production config:
+Because this project is public and no Functions are used:
+- **Do not allow public writes** to leaderboard docs.
+- Update leaderboard data only from Firebase Console (or trusted admin tooling later).
+- Public clients only read `leaderboards/overall`.
 
-1. Firebase project ID
-2. Whether you want JS or TS functions
-3. Your preferred password policy (length/rotation)
-4. Whether admin panel uses Firebase Auth or shared admin password only
+## 6) Optional next step
+
+If later you want user-submitted tracks/runs, we can add Firebase Auth + separate moderated queues with strict write validation rules.
