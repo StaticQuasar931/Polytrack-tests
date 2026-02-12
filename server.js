@@ -130,13 +130,15 @@ function computeTrackLeaderboard(results, trackId, limit = 50) {
   const bestByUser = new Map();
   for (const row of results) {
     if (row.trackId !== trackId) continue;
-    const prev = bestByUser.get(row.userId);
-    if (!prev || row.timeMs < prev.timeMs) bestByUser.set(row.userId, row);
+    const key = row.userId || row.accountId;
+    if (!key) continue;
+    const prev = bestByUser.get(key);
+    if (!prev || row.timeMs < prev.timeMs) bestByUser.set(key, row);
   }
   const list = Array.from(bestByUser.values()).sort((a, b) => a.timeMs - b.timeMs);
   return list.slice(0, limit).map((row, idx) => ({
     rank: idx + 1,
-    userId: row.userId,
+      userId: row.userId || row.accountId,
     name: row.name,
     timeMs: row.timeMs,
     attempts: row.attempts || 1,
@@ -221,7 +223,7 @@ async function handleApi(req, res, pathname, urlObj) {
     }
 
     const trackId = cleanId(body.trackId);
-    const userId = cleanId(body.userId || body.tokenHash || body.token || body.guestId);
+    const userId = cleanId(body.userId || body.accountId || body.userTokenHash || body.tokenHash || body.token || body.guestId);
     const name = cleanName(body.name || body.nickname || "Player");
     const timeMs = Number(body.timeMs ?? body.time);
 
@@ -236,8 +238,14 @@ async function handleApi(req, res, pathname, urlObj) {
     const row = {
       trackId,
       userId,
+      accountId: userId,
       name,
       timeMs: Math.round(timeMs),
+      frames: Number(body.frames || 0) || null,
+      replay: typeof body.replay === "string" ? body.replay.slice(0, 200_000) : null,
+      replayHash: cleanId(body.replayHash || body.uploadId || "") || null,
+      carId: cleanId(body.carId || body.car || body.carName || "") || null,
+      carColors: String(body.carColors || body.CarColors || "").slice(0, 64) || null,
       timestamp: Date.now(),
       attempts,
     };
