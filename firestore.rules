@@ -1,19 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Public read-only overall leaderboard
-    match /leaderboards/overall {
+    // Overall ranking document (public read)
+    match /leaderboards_overall/main {
       allow read: if true;
       allow write: if false;
     }
 
-    // Optional future collection examples (read-only by default)
-    match /leaderboards/{docId} {
+    // Per-track boards (public read)
+    match /leaderboards_tracks/{trackId} {
       allow read: if true;
       allow write: if false;
     }
 
-    // Deny everything else by default
+    // Published tracks list (public read)
+    match /tracks_catalog/{trackId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Raw race result archive (disabled from public clients)
+    match /race_results/{resultId} {
+      allow read, write: if false;
+    }
+
+    // Default deny-all
     match /{document=**} {
       allow read, write: if false;
     }

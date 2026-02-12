@@ -1,39 +1,20 @@
-# Firebase setup (Hosting + Firestore only, no Functions)
-
-This setup matches your Firebase free-plan constraint: **no Cloud Functions**.
+# Firebase setup (Hosting + Firestore, free plan compatible)
 
 Project:
-- **Project ID:** `polytrack-052`
-- **Web App ID:** `1:1000092276003:web:dbde7b8770d345f1ea6896`
+- Project ID: `polytrack-052`
+- Web App ID: `1:1000092276003:web:dbde7b8770d345f1ea6896`
 
-## 1) Enable Firestore
+## Firestore collections used
 
-In Firebase Console:
-1. Build -> Firestore Database
-2. Create database (Native mode)
-3. Pick region close to players
+- `leaderboards_overall/main`
+  - `entries: [{ rank, name, score, raceCount, totalTracks }]`
+- `leaderboards_tracks/{trackId}`
+  - `entries: [{ rank, name, timeMs, userId, attempts, updatedAt }]`
+- `tracks_catalog/{trackId}`
+  - `title, author, category, updatedAt`
+- `race_results/{docId}` *(optional archival / analytics)*
 
-## 2) Create leaderboard document
-
-Create this document in Firestore:
-
-- Collection: `leaderboards`
-- Document: `overall`
-- Field: `entries` (array)
-
-Each array item shape:
-
-```json
-{
-  "rank": 1,
-  "name": "GhostDriver",
-  "averageRank": 1.42,
-  "raceCount": 18,
-  "totalTracks": 20
-}
-```
-
-## 3) Deploy Firestore rules
+## Rules to deploy
 
 Use the `firestore.rules` file in this repo.
 
@@ -43,19 +24,15 @@ Deploy command:
 firebase deploy --only firestore:rules
 ```
 
-## 4) Deploy hosting
+## Hosting deploy
 
 ```bash
 firebase deploy --only hosting
 ```
 
-## 5) How updates should be done (safe/public project)
+## Important operational note
 
-Because this project is public and no Functions are used:
-- **Do not allow public writes** to leaderboard docs.
-- Update leaderboard data only from Firebase Console (or trusted admin tooling later).
-- Public clients only read `leaderboards/overall`.
-
-## 6) Optional next step
-
-If later you want user-submitted tracks/runs, we can add Firebase Auth + separate moderated queues with strict write validation rules.
+For this public project:
+- Keep client writes disabled in Firestore rules.
+- Update leaderboard and track docs from Firebase Console (or trusted backend tooling later).
+- If you later add authenticated submissions, we can add a moderated queue with strict validation rules.
