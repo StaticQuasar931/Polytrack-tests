@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v15";
+  const MARKER = "polytrack-extension-inline-v16";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -36,8 +36,6 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     appId: "1:1000092276003:web:dbde7b8770d345f1ea6896",
     measurementId: "G-QLJD8PH59N"
   };
-
-  const CLOUD_API_ORIGIN = (window.POLYTRACK_API_ORIGIN || 'https://polytrack-052--h43456847.replit.app').replace(/\/$/, '');
 
   const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
   const p0='c3e7',p1='8a14';
@@ -377,13 +375,19 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function makeLeaderboardPayload(method){
     const base = {
       entries: [],
+      Entries: [],
       total: 1,
       Total: 1,
       position: 1,
+      Position: 1,
       newPosition: 1,
+      NewPosition: 1,
       previousPosition: 1,
+      PreviousPosition: 1,
       positionChange: 0,
-      uploadId: null
+      uploadId: null,
+      success: true,
+      verifiedState: 0
     };
     if (method === 'POST') base.uploadId = nextUploadId();
     return base;
@@ -392,7 +396,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function shouldMock(urlObj){
     if (!urlObj) return false;
     const path = urlObj.pathname;
-    const isLegacyPath = path === '/user';
+    const isLegacyPath = path === '/user' || path === '/leaderboard';
     if (!isLegacyPath) return false;
     return urlObj.host === 'vps.kodub.com';
   }
@@ -459,11 +463,23 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       });
       await d.collection('system').doc('last_race_ingest').set({ accountId, trackId, timeMs, updatedAt: createdAt }, { merge: true });
       log('info','Race mirrored to Firestore',{accountId,trackId,timeMs});
+
     } catch (error) {
-      const fallbackOk = await postRaceFallback({ trackId, accountId, userId: accountId, name, timeMs });
-      if (!fallbackOk) {
+      try {
+        const res = await fetch('/api/race-result', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trackId, accountId, userId: accountId, name, timeMs })
+        });
+        if (res.ok) {
+          log('info','Race mirror API fallback accepted',{status:res.status,trackId,accountId});
+        } else {
+          log('warn','Race mirror API fallback rejected',{status:res.status,trackId,accountId});
+        }
+      } catch (fallbackError) {
         log('error','Race mirror failed in both Firestore and API fallback', {
           firestoreError: String(error && (error.message || error)),
+          fallbackError: String(fallbackError && (fallbackError.message || fallbackError)),
           trackId,
           accountId
         });
@@ -471,38 +487,6 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     }
   }
 
-
-  function mapLegacyLeaderboardUrl(urlObj){
-    if (!urlObj) return null;
-    if (urlObj.host !== 'vps.kodub.com') return null;
-    if (urlObj.pathname !== '/leaderboard') return null;
-    return `${CLOUD_API_ORIGIN}/leaderboard${urlObj.search}`;
-  }
-
-  async function postRaceFallback(payload){
-    const targets = [
-      `${CLOUD_API_ORIGIN}/race-result`,
-      `${CLOUD_API_ORIGIN}/api/race-result`,
-      '/api/race-result'
-    ];
-    for (const target of targets) {
-      try {
-        const res = await fetch(target, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        if (res.ok) {
-          log('info','Race mirror API fallback accepted',{target,status:res.status,trackId:payload.trackId,accountId:payload.accountId});
-          return true;
-        }
-        log('warn','Race mirror API fallback rejected',{target,status:res.status,trackId:payload.trackId,accountId:payload.accountId});
-      } catch (error) {
-        log('warn','Race mirror API fallback network error',{target,error:String(error && (error.message || error))});
-      }
-    }
-    return false;
-  }
 
   function hookLegacyNetworking(){
     const originalFetch = window.fetch.bind(window);
@@ -512,8 +496,6 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const urlObj = parseTarget(rawUrl);
       if (urlObj?.pathname === '/leaderboard' && method === 'POST') mirrorRaceResult(urlObj.toString(), options.body);
       if (shouldMock(urlObj)) return new Response(JSON.stringify(mockPayload(urlObj, method)), { status: 200, headers: { 'Content-Type': 'application/json' } });
-      const mapped = mapLegacyLeaderboardUrl(urlObj);
-      if (mapped) return originalFetch(mapped, options);
       return originalFetch(url, options);
     };
 
@@ -528,12 +510,6 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         const payload = JSON.stringify(mockPayload(this.__extUrlObj, this.__extMethod));
         this.__extBlobUrl = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
         return originalOpen.call(this, 'GET', this.__extBlobUrl, ...rest);
-      }
-      const mapped = mapLegacyLeaderboardUrl(this.__extUrlObj);
-      if (mapped) {
-        this.__extUrl = mapped;
-        this.__extUrlObj = parseTarget(mapped);
-        return originalOpen.call(this, method, mapped, ...rest);
       }
       return originalOpen.call(this, method, url, ...rest);
     };
@@ -645,4 +621,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v15 */
+/* polytrack-extension-inline-v16 */
