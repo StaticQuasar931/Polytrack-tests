@@ -150,6 +150,14 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     });
   }
 
+  let lastMirrorSig = '';
+  let lastMirrorAt = 0;
+
+  function sanitizeDisplayName(value){
+    const n = String(value || '').trim().slice(0, 24);
+    return n || 'Guest';
+  }
+
   function loadScript(src){
     return new Promise((resolve,reject)=>{
       const existing = document.querySelector(`script[data-ext-src="${src}"]`);
@@ -373,6 +381,51 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     })).sort((a,b)=>a.rank-b.rank);
   }
 
+
+  function computeTrackTopEntries(rows, trackId, limit=10){
+    const bestByUser = new Map();
+    for (const row of rows) {
+      if (String(row.trackId || '') !== String(trackId || '')) continue;
+      const userId = String(row.accountId || row.userId || '').slice(0, 128);
+      if (!userId) continue;
+      const timeMs = Number(row.timeMs || 0);
+      if (!Number.isFinite(timeMs) || timeMs <= 0) continue;
+      const prev = bestByUser.get(userId);
+      if (!prev || timeMs < prev.timeMs) {
+        bestByUser.set(userId, {
+          accountId: userId,
+          name: sanitizeDisplayName(row.name),
+          timeMs,
+          raceTimeFrames: Number(row.raceTimeFrames || 0) || null,
+          replayHash: row.replayHash || null,
+          carId: row.carId || null,
+          carColors: row.carColors || null,
+          createdAt: Number(row.createdAt || 0)
+        });
+      }
+    }
+    return Array.from(bestByUser.values())
+      .sort((a,b)=>a.timeMs-b.timeMs)
+      .slice(0, limit)
+      .map((entry, idx)=>({ rank: idx+1, ...entry }));
+  }
+
+  async function getTrackEntries(trackId, limit=10){
+    const d = await db();
+    const doc = await d.collection('leaderboards_track').doc(String(trackId)).get();
+    const data = doc.data() || {};
+    let entries = Array.isArray(data.entries) ? data.entries : [];
+    if (!entries.length) {
+      const snap = await d.collection('race_results').where('trackId','==', String(trackId)).orderBy('timeMs','asc').limit(500).get();
+      const rows = snap.docs.map((x)=>x.data() || {});
+      entries = computeTrackTopEntries(rows, trackId, Math.max(10, limit));
+      if (entries.length) {
+        d.collection('leaderboards_track').doc(String(trackId)).set({ trackId: String(trackId), entries, updatedAt: Date.now() }, { merge:true }).catch(()=>{});
+      }
+    }
+    return entries.slice(0, limit);
+  }
+
   function computeOverallFromRaceRows(rows){
     const bestByTrackAndUser = new Map();
     for (const row of rows) {
@@ -510,24 +563,26 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     };
   }
 
-  function makeLeaderboardPayload(method){
-    const entries = enrichLegacyLeaderboardEntries([]);
+  function makeLeaderboardPayload(method, entries=[], position=1, previousPosition=1){
+    const normalizedEntries = enrichLegacyLeaderboardEntries(entries);
+    const pos = safePositiveInt(position, 1);
+    const prevPos = safePositiveInt(previousPosition, pos);
     const base = {
-      entries,
-      Entries: entries,
-      total: 1,
-      Total: 1,
-      position: 1,
-      Position: 1,
-      newPosition: 1,
-      NewPosition: 1,
-      previousPosition: 1,
-      PreviousPosition: 1,
-      positionChange: 0,
+      entries: normalizedEntries,
+      Entries: normalizedEntries,
+      total: Math.max(1, normalizedEntries.length || 1),
+      Total: Math.max(1, normalizedEntries.length || 1),
+      position: pos,
+      Position: pos,
+      newPosition: pos,
+      NewPosition: pos,
+      previousPosition: prevPos,
+      PreviousPosition: prevPos,
+      positionChange: prevPos - pos,
       uploadId: null,
       success: true,
       verifiedState: 0,
-      entry: null
+      entry: normalizedEntries[0] || null
     };
     if (method === 'POST') base.uploadId = nextUploadId();
     return base;
@@ -541,9 +596,18 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     return urlObj.host === 'vps.kodub.com';
   }
 
-  function mockPayload(urlObj, method){
+  async function mockPayload(urlObj, method, body){
     if (urlObj.pathname === '/user') return makeUserPayload();
-    if (urlObj.pathname === '/leaderboard') return makeLeaderboardPayload(method);
+    if (urlObj.pathname === '/leaderboard') {
+      const trackId = String(urlObj.searchParams.get('trackId') || '').slice(0,80);
+      if (!trackId) return makeLeaderboardPayload(method);
+      const hinted = parsePayload(body) || {};
+      const accountId = resolveProfileAccountId(hinted, String(urlObj.searchParams.get('userTokenHash') || hinted.userTokenHash || hinted.userId || hinted.accountId || guestAccountId));
+      const entries = await getTrackEntries(trackId, Number(urlObj.searchParams.get('amount') || 10) || 10).catch(()=>[]);
+      const mine = entries.find((e)=>String(e.accountId||'')===String(accountId||''));
+      const myPos = safePositiveInt(mine?.rank || 1, 1);
+      return makeLeaderboardPayload(method, entries, myPos, myPos);
+    }
     return { ok: true };
   }
 
@@ -578,8 +642,14 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const hintedAccountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || guestAccountId || '').slice(0,128);
     const accountId = resolveProfileAccountId(payload, hintedAccountId);
     const trackId = String(payload.trackId || '').slice(0,80);
-    const name = String(payload.name || payload.nickname || 'Player').slice(0,24);
+    const name = sanitizeDisplayName(payload.name || payload.nickname || 'Player');
     const timeMs = Number(payload.timeMs || payload.time || payload.total || payload.frames || 0);
+    const replaySig = String(payload.replayHash || payload.uploadId || '').slice(0,128);
+    const mirrorSig = `${accountId}|${trackId}|${timeMs}|${replaySig}`;
+    if (mirrorSig === lastMirrorSig && Date.now() - lastMirrorAt < 4000) {
+      log('info','Skipped duplicate race mirror',{accountId,trackId,timeMs});
+      return;
+    }
     if (!accountId || !trackId || !Number.isFinite(timeMs) || timeMs <= 0) {
       log('warn','Skipped race mirror due to invalid payload',{accountId:!!accountId,trackId:!!trackId,timeMs});
       return;
@@ -589,13 +659,15 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const createdAt = Date.now();
       const carId = String(payload.car || payload.carId || payload.carName || '').slice(0,64) || null;
       const carColors = String(payload.carColors || payload.CarColors || '').slice(0,64) || null;
+      lastMirrorSig = mirrorSig;
+      lastMirrorAt = Date.now();
       await d.collection('race_results').add({
         accountId,
         trackId,
         name,
         timeMs,
         replay: payload.replay || payload.replayData || null,
-        replayHash: String(payload.replayHash || payload.uploadId || '').slice(0,128) || null,
+        replayHash: replaySig || null,
         carId,
         carColors,
         raceTimeFrames: Number(payload.frames || payload.numberOfFrames || 0) || null,
@@ -611,6 +683,16 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         carColors,
         updatedAt: createdAt
       }, { merge: true });
+      const trackSnap = await d.collection('race_results').where('trackId','==', String(trackId)).orderBy('timeMs','asc').limit(500).get();
+      const trackRows = trackSnap.docs.map((x)=>x.data() || {});
+      const topEntries = computeTrackTopEntries(trackRows, trackId, 100);
+      await d.collection('leaderboards_track').doc(String(trackId)).set({ trackId: String(trackId), entries: topEntries, updatedAt: createdAt }, { merge: true });
+      const allSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(2500).get();
+      const allRows = allSnap.docs.map((x)=>x.data() || {});
+      const overallEntries = normalizeEntries(computeOverallFromRaceRows(allRows));
+      if (overallEntries.length) {
+        await d.collection('leaderboards_overall').doc('main').set({ entries: overallEntries, updatedAt: createdAt, seededBy: MARKER }, { merge: true });
+      }
       await d.collection('system').doc('last_race_ingest').set({ accountId, trackId, timeMs, updatedAt: createdAt }, { merge: true });
       log('info','Race mirrored to Firestore',{accountId,trackId,timeMs,name});
 
@@ -653,7 +735,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const rawUrl = typeof url === 'string' ? url : String(url || '');
       const urlObj = parseTarget(rawUrl);
       if (urlObj?.pathname === '/leaderboard' && method === 'POST') mirrorRaceResult(urlObj.toString(), options.body);
-      if (shouldMock(urlObj)) return new Response(JSON.stringify(mockPayload(urlObj, method)), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      if (shouldMock(urlObj)) {
+        const payload = await mockPayload(urlObj, method, options.body);
+        return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
       return originalFetch(url, options);
     };
 
@@ -664,8 +749,9 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       this.__extUrl = String(url || '');
       this.__extUrlObj = parseTarget(this.__extUrl);
       this.__extMock = shouldMock(this.__extUrlObj);
-      if (this.__extMock) {
-        const payload = JSON.stringify(mockPayload(this.__extUrlObj, this.__extMethod));
+      this.__extMockDynamic = this.__extMock && this.__extUrlObj?.pathname === '/leaderboard';
+      if (this.__extMock && !this.__extMockDynamic) {
+        const payload = JSON.stringify(makeUserPayload());
         this.__extBlobUrl = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
         return originalOpen.call(this, 'GET', this.__extBlobUrl, ...rest);
       }
@@ -673,6 +759,17 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     };
     XMLHttpRequest.prototype.send = function(body){
       if (this.__extUrlObj?.pathname === '/leaderboard' && this.__extMethod === 'POST') mirrorRaceResult(this.__extUrlObj.toString(), body);
+      if (this.__extMockDynamic) {
+        mockPayload(this.__extUrlObj, this.__extMethod, body).then((payload)=>{
+          this.__extBlobUrl = URL.createObjectURL(new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+          originalOpen.call(this, 'GET', this.__extBlobUrl, true);
+          this.addEventListener('loadend', () => { if (this.__extBlobUrl) URL.revokeObjectURL(this.__extBlobUrl); }, { once: true });
+          originalSend.call(this, null);
+        }).catch(()=>{
+          originalSend.call(this, body);
+        });
+        return;
+      }
       if (this.__extMock) {
         this.addEventListener('loadend', () => { if (this.__extBlobUrl) URL.revokeObjectURL(this.__extBlobUrl); }, { once: true });
         return originalSend.call(this, null);
@@ -715,10 +812,21 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     ensurePersistentInfoBranding();
   }
 
+  function hideVerifiedOnlyToggle(){
+    const candidates = Array.from(document.querySelectorAll('label,button,div,span'));
+    for (const el of candidates) {
+      const text = (el.textContent || '').trim().toLowerCase();
+      if (text === 'verified only' || text.includes('verified only')) {
+        el.style.display = 'none';
+      }
+    }
+  }
+
   function reconcileUI(){
     injectRankingsButton();
     setUnofficialMessage();
     ensurePersistentInfoBranding();
+    hideVerifiedOnlyToggle();
   }
 
 
