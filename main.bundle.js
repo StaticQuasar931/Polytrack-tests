@@ -44,6 +44,25 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   let rankingsSpawnedOnce = false;
   let rankingsButtonRef = null;
   let localUploadCounter = Number(localStorage.getItem('polytrack-upload-counter') || '0') || 0;
+  const GUEST_ID_KEY = 'polytrack-guest-account-id';
+  function randomGuestSuffix(){
+    try {
+      if (window.crypto?.getRandomValues) {
+        const buf = new Uint8Array(8);
+        window.crypto.getRandomValues(buf);
+        return Array.from(buf, (b)=>b.toString(16).padStart(2,'0')).join('');
+      }
+    } catch {}
+    return Math.random().toString(36).slice(2, 12);
+  }
+  function getOrCreateGuestAccountId(){
+    const existing = localStorage.getItem(GUEST_ID_KEY);
+    if (existing && /^[a-zA-Z0-9_.:-]{6,128}$/.test(existing)) return existing;
+    const created = `guest-${Date.now().toString(36)}-${randomGuestSuffix()}`.slice(0, 128);
+    localStorage.setItem(GUEST_ID_KEY, created);
+    return created;
+  }
+  const guestAccountId = getOrCreateGuestAccountId();
   const BRAND_FP = `${q0}${q1}${q2}${q3}`;
   const WARN_FP = `${p0}${p1}`;
   const TOTAL_TRACKS = 47;
@@ -335,8 +354,12 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   function makeUserPayload(){
     return {
-      id: 0,
-      Id: 0,
+      id: 1,
+      Id: 1,
+      userId: guestAccountId,
+      accountId: guestAccountId,
+      userTokenHash: guestAccountId,
+      tokenHash: guestAccountId,
       name:'Guest',
       nickname:'Guest',
       carColors:'0,0,0,0,0,0',
@@ -406,7 +429,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   async function mirrorRaceResult(url, body){
     const payload = parsePayload(body); if (!payload) return;
-    const accountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || '').slice(0,128);
+    const accountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || guestAccountId || '').slice(0,128);
     const trackId = String(payload.trackId || '').slice(0,80);
     const name = String(payload.name || payload.nickname || 'Player').slice(0,24);
     const timeMs = Number(payload.timeMs || payload.time || payload.total || payload.frames || 0);
@@ -527,6 +550,25 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     ensurePersistentInfoBranding();
   }
 
+
+  function isElementVisible(el){
+    return !!(el && el.isConnected && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden');
+  }
+
+  function isStartMenuHotkeyContext(){
+    const menu = document.querySelector('.menu');
+    if (!isElementVisible(menu)) return false;
+    const container = document.querySelector('.main-buttons-container');
+    if (!isElementVisible(container)) return false;
+    const play = Array.from(container.querySelectorAll('button')).find((b)=>/play/i.test((b.textContent||'').trim()));
+    if (!isElementVisible(play)) return false;
+    const profileInputOpen = !!document.querySelector('.profile-menu input:focus, .profile input:focus, input[type="text"]:focus');
+    if (profileInputOpen) return false;
+    const overlayCandidates = Array.from(document.querySelectorAll('.settings,.settings-menu,.popup,.dialog,[role="dialog"]'));
+    if (overlayCandidates.some((el)=>isElementVisible(el))) return false;
+    return true;
+  }
+
   let reconcileScheduled = false;
   const observer = new MutationObserver(() => {
     if (reconcileScheduled) return;
@@ -549,15 +591,13 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         if (panel && panel.style.display === 'block') { panel.style.display='none'; event.preventDefault(); return; }
       }
       if ([' ','Spacebar'].includes(event.key)) {
-        const menuVisible = document.querySelector('.menu') && getComputedStyle(document.querySelector('.menu')).display !== 'none';
-        if (menuVisible) {
-          const play = Array.from(document.querySelectorAll('.main-buttons-container button')).find(b=>/play/i.test(b.textContent||''));
+        if (isStartMenuHotkeyContext()) {
+          const play = Array.from(document.querySelectorAll('.main-buttons-container button')).find((b)=>/play/i.test((b.textContent||'').trim()));
           if (play) { play.click(); event.preventDefault(); }
         }
       }
       if (['e','r','l','E','R','L'].includes(event.key)) {
-        const menuVisible = document.querySelector('.menu') && getComputedStyle(document.querySelector('.menu')).display !== 'none';
-        if (menuVisible) {
+        if (isStartMenuHotkeyContext()) {
           const rb = document.getElementById('injectedRankingsBtn');
           if (rb) { rb.click(); event.preventDefault(); }
         }
