@@ -41,7 +41,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   const p0='c3e7',p1='8a14';
 
   let firestorePromise = null;
-  let rankingsSpawnedOnce = sessionStorage.getItem('polytrack-rankings-animated') === '1';
+  let rankingsSpawnedOnce = false;
   let rankingsButtonRef = null;
   let localUploadCounter = Number(localStorage.getItem('polytrack-upload-counter') || '0') || 0;
   const GUEST_ID_KEY = 'polytrack-guest-account-id';
@@ -66,9 +66,9 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   const PROFILE_MAP_KEY = 'polytrack-profile-id-map-v1';
   const LAST_ACTIVE_NAME_KEY = 'polytrack-last-active-name';
   const LAST_ACTIVE_COLORS_KEY = 'polytrack-last-active-colors';
-  const PROFILE_NAME_WORD_A = ['swift','neon','alpha','turbo','sonic','pixel','nova','lucky','sunny','frost','ember','quantum'];
-  const PROFILE_NAME_WORD_B = ['racer','drift','pulse','track','echo','comet','storm','shift','vault','spark','dash','glide'];
-  const DEFAULT_NAME_BLOCKLIST = ['admin','moderator','owner','staff','support','system','dev','developer','verified','nigger','faggot','kike','rape','rapist','pedophile','pedo','hitler','naz'];
+  const PROFILE_NAME_WORD_A = ['swift','neon','alpha','turbo','sonic','pixel','nova','lucky','sunny','frost','ember','quantum','crystal','midnight','solar','lunar','hyper','ultra','aero','rapid','vivid','thunder','cosmic','silver','golden','shadow','arc','vector','iron','onyx'];
+  const PROFILE_NAME_WORD_B = ['racer','drift','pulse','track','echo','comet','storm','shift','vault','spark','dash','glide','runner','rocket','flare','nexus','voyage','blaze','orbit','flux','drive','streak','zenith','quartz','radar','pilot','charger','phantom','matrix','engine'];
+  const DEFAULT_NAME_BLOCKLIST = ['admin','moderator','owner','staff','support','system','dev','developer','verified','helper','official','security','nigger','faggot','kike','rape','rapist','pedophile','pedo','hitler','nazi','nazism','coon','chink','spic','wetback','retard','whore','slut','bitch','asshole','motherfucker','cunt','dick','penis','vagina','porn','pornhub','nudes','incest','molest','molester','child','minor','underage','loli','shota','goon','gooning','rizzler','1488','kkk','swastika','terrorist','isis','alqaeda'];
   let dynamicNameBlocklistPromise = null;
 
   function readProfileMap(){
@@ -147,7 +147,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const frames = safePositiveInt(entry?.time?.numberOfFrames || entry?.frames || derivedFrames || 1, 1);
       const userId = String(entry?.userId || entry?.accountId || entry?.id || `user-${rank}`);
       return {
-        id: String(entry?.id || userId || `mock-${rank}`),
+        id: Number.isSafeInteger(Number(entry?.id)) ? Number(entry.id) : rank,
         userId,
         accountId: userId,
         name: String(entry?.name || getLastKnownName(userId) || 'Guest').slice(0, 24),
@@ -155,6 +155,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         verifiedState: Number.isFinite(Number(entry?.verifiedState)) ? Number(entry.verifiedState) : 0,
         rank,
         position: rank,
+        frames,
         time: { numberOfFrames: frames },
         timeMs: Number(entry?.timeMs || frames) || frames
       };
@@ -489,6 +490,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           name: sanitizeDisplayName(row.name || getLastKnownName(userId) || 'Guest'),
           timeMs,
           raceTimeFrames: Number(row.raceTimeFrames || 0) || null,
+          frames: safePositiveInt(row.frames || row.raceTimeFrames || Math.round((timeMs || 1) * 0.06), 1),
+          verifiedState: Number.isFinite(Number(row.verifiedState)) ? Number(row.verifiedState) : 0,
           replayHash: row.replayHash || null,
           carId: row.carId || null,
           carColors: row.carColors || null,
@@ -698,7 +701,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       uploadId: null,
       success: true,
       verifiedState: 0,
-      entry: normalizedEntries[0] || null
+      entry: normalizedEntries[0] || null,
+      userEntry: normalizedEntries[0] ? { id: normalizedEntries[0].id, position: pos, frames: normalizedEntries[0].frames || normalizedEntries[0].time?.numberOfFrames || 1 } : null
     };
     if (method === 'POST') base.uploadId = nextUploadId();
     return base;
@@ -932,7 +936,6 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const existing = container.querySelectorAll('button.button-image');
       button.style.animationDelay = (0.3 + existing.length * 0.1).toFixed(1) + 's';
       rankingsSpawnedOnce = true;
-      try { sessionStorage.setItem('polytrack-rankings-animated','1'); } catch {}
     } else {
       button.classList.remove('button-spawn');
       button.style.animation = 'none';
@@ -1029,4 +1032,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v18 */
+/* polytrack-extension-inline-v19 */
