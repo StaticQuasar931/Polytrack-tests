@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v16";
+  const MARKER = "polytrack-extension-inline-v17";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -41,7 +41,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   const p0='c3e7',p1='8a14';
 
   let firestorePromise = null;
-  let rankingsSpawnedOnce = false;
+  let rankingsSpawnedOnce = sessionStorage.getItem('polytrack-rankings-animated') === '1';
   let rankingsButtonRef = null;
   let localUploadCounter = Number(localStorage.getItem('polytrack-upload-counter') || '0') || 0;
   const GUEST_ID_KEY = 'polytrack-guest-account-id';
@@ -158,6 +158,23 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     return n || 'Guest';
   }
 
+  function getLastKnownName(accountId){
+    try {
+      const raw = localStorage.getItem('polytrack-profile-last-names-v1');
+      const map = raw ? JSON.parse(raw) : {};
+      return String(map?.[accountId] || '').slice(0,24);
+    } catch { return ''; }
+  }
+
+  function setLastKnownName(accountId, name){
+    try {
+      const raw = localStorage.getItem('polytrack-profile-last-names-v1');
+      const map = raw ? JSON.parse(raw) : {};
+      map[accountId] = sanitizeDisplayName(name);
+      localStorage.setItem('polytrack-profile-last-names-v1', JSON.stringify(map));
+    } catch {}
+  }
+
   function loadScript(src){
     return new Promise((resolve,reject)=>{
       const existing = document.querySelector(`script[data-ext-src="${src}"]`);
@@ -177,13 +194,34 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     });
   }
 
+  async function resolveFirebaseConfig(){
+    if (window.__polytrackFirebaseConfig) return window.__polytrackFirebaseConfig;
+    if (window.POLYTRACK_FIREBASE_CONFIG && window.POLYTRACK_FIREBASE_CONFIG.projectId) {
+      window.__polytrackFirebaseConfig = window.POLYTRACK_FIREBASE_CONFIG;
+      return window.__polytrackFirebaseConfig;
+    }
+    try {
+      const res = await fetch('./firebase-config.json', { cache: 'no-store' });
+      if (res.ok) {
+        const cfg = await res.json();
+        if (cfg && cfg.projectId && cfg.apiKey && cfg.appId) {
+          window.__polytrackFirebaseConfig = cfg;
+          return cfg;
+        }
+      }
+    } catch {}
+    window.__polytrackFirebaseConfig = FIREBASE_CONFIG;
+    return window.__polytrackFirebaseConfig;
+  }
+
   async function db(){
     if (firestorePromise) return firestorePromise;
     firestorePromise = (async ()=>{
       await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js');
-      const app = window.firebase.apps?.length ? window.firebase.app() : window.firebase.initializeApp(FIREBASE_CONFIG);
+      const cfg = await resolveFirebaseConfig();
+      const app = window.firebase.apps?.length ? window.firebase.app() : window.firebase.initializeApp(cfg);
       if (window.firebase?.auth) {
         const auth = app.auth();
         if (!auth.currentUser) {
@@ -204,7 +242,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     try {
       const d = await db();
       await d.collection('system').doc('bootstrap').set({
-        projectId: FIREBASE_CONFIG.projectId,
+        projectId: (window.__polytrackFirebaseConfig?.projectId || FIREBASE_CONFIG.projectId),
         runtime: MARKER,
         updatedAt: Date.now(),
         source: window.location.origin
@@ -416,7 +454,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const data = doc.data() || {};
     let entries = Array.isArray(data.entries) ? data.entries : [];
     if (!entries.length) {
-      const snap = await d.collection('race_results').where('trackId','==', String(trackId)).orderBy('timeMs','asc').limit(500).get();
+      const snap = await d.collection('race_results').orderBy('createdAt','desc').limit(3000).get();
       const rows = snap.docs.map((x)=>x.data() || {});
       entries = computeTrackTopEntries(rows, trackId, Math.max(10, limit));
       if (entries.length) {
@@ -642,7 +680,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const hintedAccountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || guestAccountId || '').slice(0,128);
     const accountId = resolveProfileAccountId(payload, hintedAccountId);
     const trackId = String(payload.trackId || '').slice(0,80);
-    const name = sanitizeDisplayName(payload.name || payload.nickname || 'Player');
+    let name = sanitizeDisplayName(payload.name || payload.nickname || 'Player');
+    const known = getLastKnownName(accountId);
+    if ((!name || name === 'Deleted') && known) name = known;
+    setLastKnownName(accountId, name);
     const timeMs = Number(payload.timeMs || payload.time || payload.total || payload.frames || 0);
     const replaySig = String(payload.replayHash || payload.uploadId || '').slice(0,128);
     const mirrorSig = `${accountId}|${trackId}|${timeMs}|${replaySig}`;
@@ -681,9 +722,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         name,
         carId,
         carColors,
+        firebaseUid: (window.firebase?.auth?.().currentUser?.uid || null),
         updatedAt: createdAt
       }, { merge: true });
-      const trackSnap = await d.collection('race_results').where('trackId','==', String(trackId)).orderBy('timeMs','asc').limit(500).get();
+      const trackSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(3000).get();
       const trackRows = trackSnap.docs.map((x)=>x.data() || {});
       const topEntries = computeTrackTopEntries(trackRows, trackId, 100);
       await d.collection('leaderboards_track').doc(String(trackId)).set({ trackId: String(trackId), entries: topEntries, updatedAt: createdAt }, { merge: true });
@@ -791,6 +833,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const existing = container.querySelectorAll('button.button-image');
       button.style.animationDelay = (0.3 + existing.length * 0.1).toFixed(1) + 's';
       rankingsSpawnedOnce = true;
+      try { sessionStorage.setItem('polytrack-rankings-animated','1'); } catch {}
     } else {
       button.classList.remove('button-spawn');
       button.style.animation = 'none';
@@ -887,4 +930,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v16 */
+/* polytrack-extension-inline-v17 */
