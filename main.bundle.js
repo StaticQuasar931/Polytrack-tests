@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v18";
+  const MARKER = "polytrack-extension-inline-v19";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -66,6 +66,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   const PROFILE_MAP_KEY = 'polytrack-profile-id-map-v1';
   const LAST_ACTIVE_NAME_KEY = 'polytrack-last-active-name';
   const LAST_ACTIVE_COLORS_KEY = 'polytrack-last-active-colors';
+  const PROFILE_NAME_WORD_A = ['swift','neon','alpha','turbo','sonic','pixel','nova','lucky','sunny','frost','ember','quantum'];
+  const PROFILE_NAME_WORD_B = ['racer','drift','pulse','track','echo','comet','storm','shift','vault','spark','dash','glide'];
+  const DEFAULT_NAME_BLOCKLIST = ['admin','moderator','owner','staff','support','system','dev','developer','verified','nigger','faggot','kike','rape','rapist','pedophile','pedo','hitler','naz'];
+  let dynamicNameBlocklistPromise = null;
 
   function readProfileMap(){
     try {
@@ -139,10 +143,15 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (!Array.isArray(entries)) return [];
     return entries.map((entry, idx)=>{
       const rank = safePositiveInt(entry?.rank || entry?.position || idx + 1, idx + 1);
-      const frames = safePositiveInt(entry?.time?.numberOfFrames || entry?.frames || entry?.timeMs || 1, 1);
+      const derivedFrames = Math.max(1, Math.round((Number(entry?.timeMs || 0) || 0) * 0.06));
+      const frames = safePositiveInt(entry?.time?.numberOfFrames || entry?.frames || derivedFrames || 1, 1);
+      const userId = String(entry?.userId || entry?.accountId || entry?.id || `user-${rank}`);
       return {
-        id: String(entry?.id || `mock-${rank}`),
-        name: String(entry?.name || 'Guest').slice(0, 24),
+        id: String(entry?.id || userId || `mock-${rank}`),
+        userId,
+        accountId: userId,
+        name: String(entry?.name || getLastKnownName(userId) || 'Guest').slice(0, 24),
+        carColors: String(entry?.carColors || 'ffffff8ec7ff28346a212b58').slice(0, 24),
         verifiedState: Number.isFinite(Number(entry?.verifiedState)) ? Number(entry.verifiedState) : 0,
         rank,
         position: rank,
@@ -158,6 +167,47 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function sanitizeDisplayName(value){
     const n = String(value || '').trim().slice(0, 24);
     return n || 'Guest';
+  }
+
+  function normalizeNameForCheck(v){
+    return String(v || '').toLowerCase().replace(/[^a-z0-9Ѐ-ӿ぀-ヿ一-鿿]+/g, '');
+  }
+
+  async function getNameBlocklist(){
+    if (dynamicNameBlocklistPromise) return dynamicNameBlocklistPromise;
+    dynamicNameBlocklistPromise = (async ()=>{
+      const base = new Set(DEFAULT_NAME_BLOCKLIST.map(normalizeNameForCheck).filter(Boolean));
+      try {
+        const res = await fetch('https://raw.githubusercontent.com/StaticQuasar931/Statics-Live-Chat-2.0/codex/fix-app-logic-and-stability-issues-vd8oso/name-blocklist.js', { cache: 'no-store' });
+        if (res.ok) {
+          const text = await res.text();
+          const matches = text.match(/"([^"\\]{2,})"|'([^'\\]{2,})'/g) || [];
+          for (const item of matches) {
+            const raw = item.slice(1, -1);
+            const normalized = normalizeNameForCheck(raw);
+            if (normalized.length >= 2) base.add(normalized);
+          }
+        }
+      } catch {}
+      return Array.from(base);
+    })();
+    return dynamicNameBlocklistPromise;
+  }
+
+  function makeFallbackName(seed){
+    const hash = Math.abs(Array.from(String(seed || Date.now())).reduce((acc, ch)=>((acc * 33) ^ ch.charCodeAt(0)) >>> 0, 5381));
+    const a = PROFILE_NAME_WORD_A[hash % PROFILE_NAME_WORD_A.length];
+    const b = PROFILE_NAME_WORD_B[(Math.floor(hash / 13)) % PROFILE_NAME_WORD_B.length];
+    return `${a}${b}`.slice(0, 24);
+  }
+
+  async function enforceSafeDisplayName(value, accountId=''){
+    const clean = sanitizeDisplayName(value);
+    const blocklist = await getNameBlocklist();
+    const normalized = normalizeNameForCheck(clean);
+    const blocked = blocklist.some((w)=>w && normalized.includes(w));
+    if (!blocked) return clean;
+    return makeFallbackName(accountId || clean) || 'Guest';
   }
 
   function getLastKnownName(accountId){
@@ -414,11 +464,12 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (!Array.isArray(entries)) return [];
     return entries.map((entry, i) => ({
       rank: Number(entry.rank || i + 1),
+      userId: String(entry.userId || entry.accountId || `overall-${i+1}`),
       name: String(entry.name || 'Unknown'),
-      score: Math.max(1, Number(entry.score ?? entry.averageRank ?? 1) || 1),
+      score: Math.max(1.000001, Number(entry.score ?? entry.averageRank ?? 1.000001) || 1.000001),
       raceCount: Number(entry.raceCount || 0),
-      totalTracks: TOTAL_TRACKS
-    })).sort((a,b)=>a.rank-b.rank);
+      totalTracks: Number(entry.totalTracks || TOTAL_TRACKS) || TOTAL_TRACKS
+    })).sort((a,b)=>a.rank-b.rank).slice(0, 50);
   }
 
 
@@ -451,6 +502,23 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       .map((entry, idx)=>({ rank: idx+1, ...entry }));
   }
 
+  async function hydrateDisplayNames(entries){
+    const out = enrichLegacyLeaderboardEntries(entries);
+    try {
+      const d = await db();
+      await Promise.all(out.slice(0, 100).map(async (entry)=>{
+        const id = String(entry.userId || entry.accountId || '').slice(0, 128);
+        if (!id) return;
+        const snap = await d.collection('profiles_public').doc(id).get();
+        const profile = snap.data() || {};
+        const n = sanitizeDisplayName(profile.name || getLastKnownName(id) || entry.name || 'Guest');
+        entry.name = n;
+        setLastKnownName(id, n);
+      }));
+    } catch {}
+    return out;
+  }
+
   async function getTrackEntries(trackId, limit=10){
     const d = await db();
     const doc = await d.collection('leaderboards_track').doc(String(trackId)).get();
@@ -459,12 +527,13 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (!entries.length) {
       const snap = await d.collection('race_results').orderBy('createdAt','desc').limit(3000).get();
       const rows = snap.docs.map((x)=>x.data() || {});
-      entries = computeTrackTopEntries(rows, trackId, Math.max(10, limit));
+      entries = computeTrackTopEntries(rows, trackId, Math.max(100, limit));
       if (entries.length) {
         d.collection('leaderboards_track').doc(String(trackId)).set({ trackId: String(trackId), entries, updatedAt: Date.now() }, { merge:true }).catch(()=>{});
       }
     }
-    return entries.slice(0, limit);
+    const hydrated = await hydrateDisplayNames(entries);
+    return hydrated.slice(0, limit);
   }
 
   function computeOverallFromRaceRows(rows){
@@ -511,11 +580,14 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const out = Array.from(userAgg.values()).map((u)=>{
       const played = u.tracks.size;
       const avgRank = u.rankSum / Math.max(played, 1);
-      const participationFactor = 1 - (0.05 * Math.min(1, played / totalTracks));
-      const score = Math.max(1, avgRank * participationFactor);
-      return { name: u.name, score, raceCount: played, totalTracks };
-    }).sort((a,b)=>a.score-b.score || b.raceCount-a.raceCount)
-      .slice(0,100)
+      const coverage = Math.min(1, played / totalTracks);
+      const fieldWeight = 1 - Math.min(0.25, coverage * 0.12);
+      const trackDepthBonus = 1 / (1 + Math.log2(1 + played));
+      const uidTiebreak = ((String(u.userId).split('').reduce((acc, ch)=>acc + ch.charCodeAt(0), 0) % 997) + 1) / 1000000;
+      const score = Math.max(1.000001, 1 + (Math.max(0, avgRank - 1) * fieldWeight) + (trackDepthBonus * 0.2) + uidTiebreak);
+      return { userId: u.userId, name: u.name, score, raceCount: played, totalTracks };
+    }).sort((a,b)=>a.score-b.score || b.raceCount-a.raceCount || String(a.userId).localeCompare(String(b.userId)))
+      .slice(0,50)
       .map((row, idx)=>({ rank: idx + 1, ...row }));
     return out;
   }
@@ -526,14 +598,14 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const snap = await d.collection('leaderboards_overall').doc('main').get();
       const data = snap.data() || {};
       const direct = normalizeEntries(data.entries || []);
-      if (direct.length) return direct;
-      const racesSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(2500).get();
+      const racesSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(5000).get();
       const rows = racesSnap.docs.map((doc)=>doc.data() || {});
       const computed = normalizeEntries(computeOverallFromRaceRows(rows));
+      const best = computed.length ? computed : direct;
       if (computed.length) {
         d.collection('leaderboards_overall').doc('main').set({ entries: computed, updatedAt: Date.now(), seededBy: MARKER }, { merge: true }).catch(()=>{});
       }
-      return computed;
+      return best;
     } catch (error) {
       try {
         const res = await fetch('/api/overall-leaderboard', { cache: 'no-store' });
@@ -601,8 +673,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       CarColors: stickyColors,
       isVerifier:false,
       IsVerifier:false,
-      total:0,
-      Total:0,
+      total:1,
+      Total:1,
       uploadId:null
     };
   }
@@ -641,13 +713,30 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
 
   async function mockPayload(urlObj, method, body){
-    if (urlObj.pathname === '/user') return makeUserPayload();
+    if (urlObj.pathname === '/user') {
+      if (String(method).toUpperCase() === 'POST') {
+        const payload = parsePayload(body) || {};
+        const accountId = resolveProfileAccountId(payload, String(payload.userTokenHash || payload.userId || payload.accountId || guestAccountId || '').slice(0,128));
+        const safeName = await enforceSafeDisplayName(payload.name || payload.nickname || localStorage.getItem(LAST_ACTIVE_NAME_KEY) || 'Guest', accountId);
+        const safeColors = String(payload.carColors || payload.CarColors || localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '0,0,0,0,0,0').slice(0,64);
+        try {
+          localStorage.setItem(LAST_ACTIVE_NAME_KEY, safeName);
+          localStorage.setItem(LAST_ACTIVE_COLORS_KEY, safeColors);
+        } catch {}
+        setLastKnownName(accountId, safeName);
+        try {
+          const d = await db();
+          await d.collection('profiles_public').doc(accountId).set({ accountId, name: safeName, carColors: safeColors, updatedAt: Date.now() }, { merge: true });
+        } catch {}
+      }
+      return makeUserPayload();
+    }
     if (urlObj.pathname === '/leaderboard') {
       const trackId = String(urlObj.searchParams.get('trackId') || '').slice(0,80);
       if (!trackId) return makeLeaderboardPayload(method);
       const hinted = parsePayload(body) || {};
       const accountId = resolveProfileAccountId(hinted, String(urlObj.searchParams.get('userTokenHash') || hinted.userTokenHash || hinted.userId || hinted.accountId || guestAccountId));
-      const entries = await getTrackEntries(trackId, Number(urlObj.searchParams.get('amount') || 10) || 10).catch(()=>[]);
+      const entries = await getTrackEntries(trackId, Math.min(100, Number(urlObj.searchParams.get('amount') || 20) || 20)).catch(()=>[]);
       const mine = entries.find((e)=>String(e.accountId||'')===String(accountId||''));
       const myPos = safePositiveInt(mine?.rank || 1, 1);
       return makeLeaderboardPayload(method, entries, myPos, myPos);
@@ -686,9 +775,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const hintedAccountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || guestAccountId || '').slice(0,128);
     const accountId = resolveProfileAccountId(payload, hintedAccountId);
     const trackId = String(payload.trackId || '').slice(0,80);
-    let name = sanitizeDisplayName(payload.name || payload.nickname || 'Player');
+    let name = sanitizeDisplayName(payload.name || payload.nickname || localStorage.getItem(LAST_ACTIVE_NAME_KEY) || 'Player');
     const known = getLastKnownName(accountId);
     if ((!name || name === 'Deleted') && known) name = known;
+    name = await enforceSafeDisplayName(name, accountId);
     setLastKnownName(accountId, name);
     const timeMs = Number(payload.timeMs || payload.time || payload.total || payload.frames || 0);
     const replaySig = String(payload.replayHash || payload.uploadId || '').slice(0,128);

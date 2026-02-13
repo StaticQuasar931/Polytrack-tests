@@ -146,7 +146,7 @@ function computeTrackLeaderboard(results, trackId, limit = 50) {
   }));
 }
 
-function computeOverall(results, tracks, limit = 100) {
+function computeOverall(results, tracks, limit = 50) {
   const TRACK_TARGET = 47;
   const discovered = Array.from(new Set([...tracks.map((t) => t.trackId), ...results.map((r) => r.trackId)])).filter(Boolean);
   const activeTrackIds = discovered.slice(0, TRACK_TARGET);
@@ -158,18 +158,21 @@ function computeOverall(results, tracks, limit = 100) {
 
   const userStats = new Map();
   for (const [trackId, board] of trackBoards.entries()) {
+    const fieldSize = Math.max(1, board.length);
     for (const entry of board) {
       const current = userStats.get(entry.userId) || {
         userId: entry.userId,
         name: entry.name,
-        raceCount: 0,
         tracksSet: new Set(),
-        rankSum: 0,
+        weightedRankSum: 0,
+        weightSum: 0,
       };
       current.name = entry.name;
-      current.raceCount += 1;
       current.tracksSet.add(trackId);
-      current.rankSum += entry.rank;
+      const rankRatio = entry.rank / fieldSize;
+      const fieldWeight = 1 + Math.log2(fieldSize + 1);
+      current.weightedRankSum += rankRatio * fieldWeight;
+      current.weightSum += fieldWeight;
       userStats.set(entry.userId, current);
     }
   }
@@ -177,10 +180,11 @@ function computeOverall(results, tracks, limit = 100) {
   const totalTracks = TRACK_TARGET;
   const overall = Array.from(userStats.values()).map((u) => {
     const playedTracks = u.tracksSet.size;
-    const avgRank = u.rankSum / Math.max(u.raceCount, 1);
-    const missingTracks = Math.max(totalTracks - playedTracks, 0);
-    const coveragePenalty = missingTracks * 2;
-    const score = Math.max(1, avgRank + coveragePenalty);
+    const weightedAverage = u.weightedRankSum / Math.max(u.weightSum, 1);
+    const participationBoost = 1 - Math.min(0.16, 0.16 * (playedTracks / Math.max(totalTracks, 1)));
+    const depthBonus = 1 / (1 + Math.log2(1 + playedTracks));
+    const tieBreaker = ((String(u.userId).split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 997) + 1) / 1e6;
+    const score = Math.max(1.000001, 1 + (weightedAverage * participationBoost) + (depthBonus * 0.2) + tieBreaker);
     return {
       userId: u.userId,
       name: u.name,
@@ -190,7 +194,7 @@ function computeOverall(results, tracks, limit = 100) {
     };
   });
 
-  overall.sort((a, b) => a.score - b.score || b.raceCount - a.raceCount);
+  overall.sort((a, b) => a.score - b.score || b.raceCount - a.raceCount || String(a.userId).localeCompare(String(b.userId)));
   return overall.slice(0, limit).map((row, idx) => ({ rank: idx + 1, ...row }));
 }
 
@@ -201,7 +205,7 @@ async function handleApi(req, res, pathname, urlObj) {
   const tracks = Array.isArray(tracksData.tracks) ? tracksData.tracks : [];
 
   if (req.method === "GET" && pathname === "/api/overall-leaderboard") {
-    return sendJson(res, 200, { entries: computeOverall(results, tracks, 100) }), true;
+    return sendJson(res, 200, { entries: computeOverall(results, tracks, 50) }), true;
   }
 
   if (req.method === "GET" && pathname === "/api/leaderboard") {
