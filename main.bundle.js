@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v13";
+  const MARKER = "polytrack-extension-inline-v14";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -45,6 +45,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   let localUploadCounter = Number(localStorage.getItem('polytrack-upload-counter') || '0') || 0;
   const BRAND_FP = `${q0}${q1}${q2}${q3}`;
   const WARN_FP = `${p0}${p1}`;
+  const TOTAL_TRACKS = 47;
 
   function loadScript(src){
     return new Promise((resolve,reject)=>{
@@ -150,7 +151,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     warning.className = 'warning-message official-link';
     warning.innerHTML = '';
     const line1 = document.createElement('div');
-    line1.textContent = 'This is an unofficial community recreation made by fans.';
+    line1.textContent = 'This is an unofficial community recreation made by Static.';
     const line2 = document.createElement('div');
     line2.append('Play the official version at ');
     const link = document.createElement('a');
@@ -219,7 +220,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (document.getElementById('overallLeaderboardPanel')) return;
     const panel = document.createElement('div');
     panel.id = 'overallLeaderboardPanel';
-    panel.innerHTML = '<div class="overall-shell" style="position:relative"><div class="overall-top"><h2>Overall Rankings</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" type="button">Help</button><button id="closeOverallLeaderboard" type="button">Close</button></div></div><p class="overall-sub">Performance score across all tracks. Lower is better (1.000 is best).</p><div id="overallLeaderboardList"></div><div id="overallHelpPopup"><div class="overall-help-card"><h3>Rankings Help</h3><p>Need help? Contact us via Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>.</p><p>Suggestions are welcome through either method.</p><p class="small">Troubleshooting: refresh after updates, ensure storage is enabled, and verify network access if rankings do not update.</p><div class="overall-help-actions"><button id="overallHelpClose" type="button">Close</button></div></div></div></div>';
+    panel.innerHTML = '<div class="overall-shell" style="position:relative"><div class="overall-top"><h2>Overall Rankings</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" type="button">Help</button><button id="closeOverallLeaderboard" type="button">Close</button></div></div><p class="overall-sub">Performance score across all tracks. Lower is better (1.000 is best). Progress shown as tracks played /47.</p><div id="overallLeaderboardList"></div><div id="overallHelpPopup"><div class="overall-help-card"><h3>Rankings Help</h3><p>Need help? Contact us via Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>.</p><p>Suggestions are welcome through either method.</p><p class="small">Troubleshooting: refresh after updates, ensure storage is enabled, and verify network access if rankings do not update.</p><div class="overall-help-actions"><button id="overallHelpClose" type="button">Close</button></div></div></div></div>';
     document.body.appendChild(panel);
     panel.addEventListener('click', (event)=>{ if (event.target === panel) panel.style.display='none'; });
     panel.querySelector('#closeOverallLeaderboard').addEventListener('click', ()=>{ panel.style.display='none'; });
@@ -240,7 +241,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       name: String(entry.name || 'Unknown'),
       score: Math.max(1, Number(entry.score ?? entry.averageRank ?? 1) || 1),
       raceCount: Number(entry.raceCount || 0),
-      totalTracks: Number(entry.totalTracks || 0)
+      totalTracks: TOTAL_TRACKS
     })).sort((a,b)=>a.rank-b.rank);
   }
 
@@ -268,11 +269,11 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (!listEl) return;
     if (!entries.length){
       const placeholders = [
-        { rank:1, name:'Placeholder Driver', score:1.000, raceCount:12, totalTracks:20 },
-        { rank:2, name:'Sample Racer', score:1.012, raceCount:11, totalTracks:20 },
-        { rank:3, name:'Demo Pilot', score:1.026, raceCount:10, totalTracks:20 },
-        { rank:4, name:'Test Chassis', score:1.040, raceCount:9, totalTracks:20 },
-        { rank:5, name:'Ghost Entry', score:1.012, raceCount:8, totalTracks:20 }
+        { rank:1, name:'Placeholder Driver', score:1.000, raceCount:12, totalTracks:47 },
+        { rank:2, name:'Sample Racer', score:1.012, raceCount:11, totalTracks:47 },
+        { rank:3, name:'Demo Pilot', score:1.026, raceCount:10, totalTracks:47 },
+        { rank:4, name:'Test Chassis', score:1.040, raceCount:9, totalTracks:47 },
+        { rank:5, name:'Ghost Entry', score:1.012, raceCount:8, totalTracks:47 }
       ];
       listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">Showing placeholder names and placeholder scores until real race data is available.</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
       return;
@@ -459,9 +460,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     }
     button.innerHTML = '<img src="images/trophy.svg"><p>Rankings</p>';
     button.addEventListener('click', (event)=>{ event.preventDefault(); event.stopPropagation(); openPanel(); });
-    const playButton = Array.from(container.querySelectorAll('button')).find((candidate)=>/play/i.test(candidate.textContent || ''));
-    if (playButton?.nextSibling) container.insertBefore(button, playButton.nextSibling);
-    else container.appendChild(button);
+    button.style.order = '999';
+    container.appendChild(button);
   }
 
   function install(){
@@ -499,4 +499,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v13 */
+/* polytrack-extension-inline-v14 */

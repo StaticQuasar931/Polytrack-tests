@@ -147,7 +147,9 @@ function computeTrackLeaderboard(results, trackId, limit = 50) {
 }
 
 function computeOverall(results, tracks, limit = 100) {
-  const activeTrackIds = Array.from(new Set([...tracks.map((t) => t.trackId), ...results.map((r) => r.trackId)])).filter(Boolean);
+  const TRACK_TARGET = 47;
+  const discovered = Array.from(new Set([...tracks.map((t) => t.trackId), ...results.map((r) => r.trackId)])).filter(Boolean);
+  const activeTrackIds = discovered.slice(0, TRACK_TARGET);
   const trackBoards = new Map();
 
   for (const trackId of activeTrackIds) {
@@ -156,36 +158,34 @@ function computeOverall(results, tracks, limit = 100) {
 
   const userStats = new Map();
   for (const [trackId, board] of trackBoards.entries()) {
-    const boardSize = Math.max(board.length, 1);
     for (const entry of board) {
-      const percentile = entry.rank / boardSize;
-      const scoreComponent = percentile; // lower better
       const current = userStats.get(entry.userId) || {
         userId: entry.userId,
         name: entry.name,
         raceCount: 0,
         tracksSet: new Set(),
-        scoreSum: 0,
+        rankSum: 0,
       };
       current.name = entry.name;
       current.raceCount += 1;
       current.tracksSet.add(trackId);
-      current.scoreSum += scoreComponent;
+      current.rankSum += entry.rank;
       userStats.set(entry.userId, current);
     }
   }
 
-  const totalTracks = activeTrackIds.length;
+  const totalTracks = TRACK_TARGET;
   const overall = Array.from(userStats.values()).map((u) => {
-    const trackCoverage = totalTracks > 0 ? u.tracksSet.size / totalTracks : 0;
-    const avgPercentile = u.scoreSum / Math.max(u.raceCount, 1);
-    const coverageBonus = (1 - trackCoverage) * 0.15;
-    const score = avgPercentile + coverageBonus;
+    const playedTracks = u.tracksSet.size;
+    const avgRank = u.rankSum / Math.max(u.raceCount, 1);
+    const missingTracks = Math.max(totalTracks - playedTracks, 0);
+    const coveragePenalty = missingTracks * 2;
+    const score = Math.max(1, avgRank + coveragePenalty);
     return {
       userId: u.userId,
       name: u.name,
       score: Number(score.toFixed(6)),
-      raceCount: u.raceCount,
+      raceCount: playedTracks,
       totalTracks,
     };
   });
