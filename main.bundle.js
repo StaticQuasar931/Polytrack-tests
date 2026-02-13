@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v17";
+  const MARKER = "polytrack-extension-inline-v18";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -64,6 +64,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
   const guestAccountId = getOrCreateGuestAccountId();
   const PROFILE_MAP_KEY = 'polytrack-profile-id-map-v1';
+  const LAST_ACTIVE_NAME_KEY = 'polytrack-last-active-name';
+  const LAST_ACTIVE_COLORS_KEY = 'polytrack-last-active-colors';
 
   function readProfileMap(){
     try {
@@ -432,7 +434,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       if (!prev || timeMs < prev.timeMs) {
         bestByUser.set(userId, {
           accountId: userId,
-          name: sanitizeDisplayName(row.name),
+          userId,
+          name: sanitizeDisplayName(row.name || getLastKnownName(userId) || 'Guest'),
           timeMs,
           raceTimeFrames: Number(row.raceTimeFrames || 0) || null,
           replayHash: row.replayHash || null,
@@ -504,11 +507,12 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       });
     }
 
-    const totalTracks = TOTAL_TRACKS;
+    const totalTracks = Math.max(TOTAL_TRACKS, tracks.size || 1);
     const out = Array.from(userAgg.values()).map((u)=>{
       const played = u.tracks.size;
       const avgRank = u.rankSum / Math.max(played, 1);
-      const score = Math.max(1, avgRank + Math.max(totalTracks - played, 0) * 2);
+      const participationFactor = 1 - (0.05 * Math.min(1, played / totalTracks));
+      const score = Math.max(1, avgRank * participationFactor);
       return { name: u.name, score, raceCount: played, totalTracks };
     }).sort((a,b)=>a.score-b.score || b.raceCount-a.raceCount)
       .slice(0,100)
@@ -581,7 +585,9 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
 
   function makeUserPayload(){
-    const accountId = resolveProfileAccountId({ name: 'Guest', nickname: 'Guest', carColors: '0,0,0,0,0,0' }, guestAccountId);
+    const stickyName = sanitizeDisplayName(localStorage.getItem(LAST_ACTIVE_NAME_KEY) || 'Guest');
+    const stickyColors = String(localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '0,0,0,0,0,0').slice(0,64) || '0,0,0,0,0,0';
+    const accountId = resolveProfileAccountId({ name: stickyName, nickname: stickyName, carColors: stickyColors }, guestAccountId);
     return {
       id: 1,
       Id: 1,
@@ -589,10 +595,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       accountId,
       userTokenHash: accountId,
       tokenHash: accountId,
-      name:'Guest',
-      nickname:'Guest',
-      carColors:'0,0,0,0,0,0',
-      CarColors:'0,0,0,0,0,0',
+      name: stickyName,
+      nickname: stickyName,
+      carColors: stickyColors,
+      CarColors: stickyColors,
       isVerifier:false,
       IsVerifier:false,
       total:0,
@@ -722,9 +728,12 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         name,
         carId,
         carColors,
-        firebaseUid: (window.firebase?.auth?.().currentUser?.uid || null),
         updatedAt: createdAt
       }, { merge: true });
+      try {
+        localStorage.setItem(LAST_ACTIVE_NAME_KEY, name);
+        if (carColors) localStorage.setItem(LAST_ACTIVE_COLORS_KEY, carColors);
+      } catch {}
       const trackSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(3000).get();
       const trackRows = trackSnap.docs.map((x)=>x.data() || {});
       const topEntries = computeTrackTopEntries(trackRows, trackId, 100);
@@ -930,4 +939,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v17 */
+/* polytrack-extension-inline-v18 */
