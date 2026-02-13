@@ -73,6 +73,33 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const fn=type==='error'?console.error:type==='warn'?console.warn:console.info; fn(LOG_PREFIX,msg,data||'');
   };
 
+  function isLocalApiCapableHost(){
+    const host = String(window.location.hostname || '').toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local');
+  }
+
+  function safePositiveInt(value, fallback=1){
+    const n = Number(value);
+    return Number.isSafeInteger(n) && n >= 1 ? n : fallback;
+  }
+
+  function enrichLegacyLeaderboardEntries(entries){
+    if (!Array.isArray(entries)) return [];
+    return entries.map((entry, idx)=>{
+      const rank = safePositiveInt(entry?.rank || entry?.position || idx + 1, idx + 1);
+      const frames = safePositiveInt(entry?.time?.numberOfFrames || entry?.frames || entry?.timeMs || 1, 1);
+      return {
+        id: String(entry?.id || `mock-${rank}`),
+        name: String(entry?.name || 'Guest').slice(0, 24),
+        verifiedState: Number.isFinite(Number(entry?.verifiedState)) ? Number(entry.verifiedState) : 0,
+        rank,
+        position: rank,
+        time: { numberOfFrames: frames },
+        timeMs: Number(entry?.timeMs || frames) || frames
+      };
+    });
+  }
+
   function loadScript(src){
     return new Promise((resolve,reject)=>{
       const existing = document.querySelector(`script[data-ext-src="${src}"]`);
@@ -106,7 +133,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
             await auth.signInAnonymously();
             log('info','Signed in anonymously for Firestore access');
           } catch (error) {
-            log('info','Anonymous auth unavailable; continuing with API-backed cloud sync', String(error && (error.message || error)));
+            log('warn','Anonymous auth unavailable; enable Firebase Anonymous Auth for cloud writes', String(error && (error.message || error)));
           }
         }
       }
@@ -133,7 +160,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     } catch (error) {
       const msg = String(error && (error.message || error));
       if (/Missing or insufficient permissions/i.test(msg)) {
-        log('error','Firestore bootstrap denied by security rules', msg);
+        log('error','Firestore bootstrap denied by security rules (enable anonymous auth + publish compatible Firestore rules)', msg);
       } else {
         log('error','Firestore bootstrap failed', msg);
       }
@@ -373,9 +400,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
 
   function makeLeaderboardPayload(method){
+    const entries = enrichLegacyLeaderboardEntries([]);
     const base = {
-      entries: [],
-      Entries: [],
+      entries,
+      Entries: entries,
       total: 1,
       Total: 1,
       position: 1,
@@ -387,7 +415,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       positionChange: 0,
       uploadId: null,
       success: true,
-      verifiedState: 0
+      verifiedState: 0,
+      entry: null
     };
     if (method === 'POST') base.uploadId = nextUploadId();
     return base;
@@ -465,6 +494,14 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       log('info','Race mirrored to Firestore',{accountId,trackId,timeMs});
 
     } catch (error) {
+      if (!isLocalApiCapableHost()) {
+        log('error','Race mirror failed: Firestore unavailable and no local API on this host', {
+          firestoreError: String(error && (error.message || error)),
+          trackId,
+          accountId
+        });
+        return;
+      }
       try {
         const res = await fetch('/api/race-result', {
           method: 'POST',
