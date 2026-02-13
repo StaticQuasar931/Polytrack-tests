@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v14";
+  const MARKER = "polytrack-extension-inline-v15";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -42,10 +42,17 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   let firestorePromise = null;
   let rankingsSpawnedOnce = false;
+  let rankingsButtonRef = null;
   let localUploadCounter = Number(localStorage.getItem('polytrack-upload-counter') || '0') || 0;
   const BRAND_FP = `${q0}${q1}${q2}${q3}`;
   const WARN_FP = `${p0}${p1}`;
   const TOTAL_TRACKS = 47;
+  const LOG_PREFIX='[polytrack-data]';
+  const log=(type,msg,data)=>{
+    const rec={ts:Date.now(),type,msg,data:data||null};
+    const arr=window.__polytrackDataLog||[]; arr.push(rec); if(arr.length>200) arr.shift(); window.__polytrackDataLog=arr;
+    const fn=type==='error'?console.error:type==='warn'?console.warn:console.info; fn(LOG_PREFIX,msg,data||'');
+  };
 
   function loadScript(src){
     return new Promise((resolve,reject)=>{
@@ -70,8 +77,20 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (firestorePromise) return firestorePromise;
     firestorePromise = (async ()=>{
       await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js');
       const app = window.firebase.apps?.length ? window.firebase.app() : window.firebase.initializeApp(FIREBASE_CONFIG);
+      if (window.firebase?.auth) {
+        const auth = app.auth();
+        if (!auth.currentUser) {
+          try {
+            await auth.signInAnonymously();
+            log('info','Signed in anonymously for Firestore access');
+          } catch (error) {
+            log('warn','Anonymous auth failed; Firestore may be read-only', String(error && (error.message || error)));
+          }
+        }
+      }
       return app.firestore();
     })();
     return firestorePromise;
@@ -91,9 +110,14 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       if (!snap.exists) {
         await overallRef.set({ entries: [], updatedAt: Date.now(), seededBy: MARKER }, { merge: true });
       }
+      log('info','Firestore bootstrap ready');
     } catch (error) {
       const msg = String(error && (error.message || error));
-      if (!/Missing or insufficient permissions/i.test(msg)) console.warn('Firestore bootstrap failed:', error);
+      if (/Missing or insufficient permissions/i.test(msg)) {
+        log('error','Firestore bootstrap denied by security rules', msg);
+      } else {
+        log('error','Firestore bootstrap failed', msg);
+      }
     }
   }
 
@@ -231,6 +255,14 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     panel.querySelector('#overallHelpClose').addEventListener('click', ()=>{
       const pop = panel.querySelector('#overallHelpPopup');
       if (pop) pop.style.display = 'none';
+    });
+    panel.addEventListener('keydown', (event)=>{
+      if (event.key === 'Escape') {
+        const pop = panel.querySelector('#overallHelpPopup');
+        if (pop && pop.style.display !== 'none') { pop.style.display='none'; event.preventDefault(); return; }
+        panel.style.display='none';
+        event.preventDefault();
+      }
     });
   }
 
@@ -373,14 +405,17 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
 
   async function mirrorRaceResult(url, body){
+    const payload = parsePayload(body); if (!payload) return;
+    const accountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || '').slice(0,128);
+    const trackId = String(payload.trackId || '').slice(0,80);
+    const name = String(payload.name || payload.nickname || 'Player').slice(0,24);
+    const timeMs = Number(payload.timeMs || payload.time || payload.total || payload.frames || 0);
+    if (!accountId || !trackId || !Number.isFinite(timeMs) || timeMs <= 0) {
+      log('warn','Skipped race mirror due to invalid payload',{accountId:!!accountId,trackId:!!trackId,timeMs});
+      return;
+    }
     try {
-      const payload = parsePayload(body); if (!payload) return;
       const d = await db();
-      const accountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || '').slice(0,128);
-      const trackId = String(payload.trackId || '').slice(0,80);
-      const name = String(payload.name || payload.nickname || 'Player').slice(0,24);
-      const timeMs = Number(payload.timeMs || payload.time || payload.total || payload.frames || 0);
-      if (!accountId || !trackId || !Number.isFinite(timeMs) || timeMs <= 0) return;
       const createdAt = Date.now();
       await d.collection('race_results').add({
         accountId,
@@ -398,15 +433,23 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         source: String(url || '').slice(0,500)
       });
       await d.collection('system').doc('last_race_ingest').set({ accountId, trackId, timeMs, updatedAt: createdAt }, { merge: true });
+      log('info','Race mirrored to Firestore',{accountId,trackId,timeMs});
     } catch (error) {
       try {
-        await fetch('/api/race-result', {
+        const res = await fetch('/api/race-result', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ trackId, accountId, userId: accountId, name, timeMs })
         });
-      } catch {}
-      console.warn('Race mirror failed:', error);
+        log('warn','Race mirror fallback used',{status:res.status,trackId,accountId});
+      } catch (fallbackError) {
+        log('error','Race mirror failed in both Firestore and API fallback', {
+          firestoreError: String(error && (error.message || error)),
+          fallbackError: String(fallbackError && (fallbackError.message || fallbackError)),
+          trackId,
+          accountId
+        });
+      }
     }
   }
 
@@ -445,8 +488,11 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
   function injectRankingsButton(){
     const container = document.querySelector('.main-buttons-container');
-    if (!container || document.getElementById('injectedRankingsBtn')) return;
-    const button = document.createElement('button');
+    if (!container) return;
+    let button = document.getElementById('injectedRankingsBtn') || rankingsButtonRef;
+    if (button && button.parentElement !== container) container.appendChild(button);
+    if (button) return;
+    button = document.createElement('button');
     button.id = 'injectedRankingsBtn';
     button.className = 'button button-image';
     if (!rankingsSpawnedOnce) {
@@ -461,6 +507,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     button.innerHTML = '<img src="images/trophy.svg"><p>Rankings</p>';
     button.addEventListener('click', (event)=>{ event.preventDefault(); event.stopPropagation(); openPanel(); });
     button.style.order = '999';
+    rankingsButtonRef = button;
     container.appendChild(button);
   }
 
@@ -494,9 +541,31 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     install();
     observer.observe(document.body || document.documentElement, { childList:true, subtree:true });
     setInterval(reconcileUI, 7000);
+    window.addEventListener('keydown', (event)=>{
+      if (event.key === 'Escape') {
+        const panel = document.getElementById('overallLeaderboardPanel');
+        const help = document.getElementById('overallHelpPopup');
+        if (help && help.style.display !== 'none') { help.style.display='none'; event.preventDefault(); return; }
+        if (panel && panel.style.display === 'block') { panel.style.display='none'; event.preventDefault(); return; }
+      }
+      if ([' ','Spacebar'].includes(event.key)) {
+        const menuVisible = document.querySelector('.menu') && getComputedStyle(document.querySelector('.menu')).display !== 'none';
+        if (menuVisible) {
+          const play = Array.from(document.querySelectorAll('.main-buttons-container button')).find(b=>/play/i.test(b.textContent||''));
+          if (play) { play.click(); event.preventDefault(); }
+        }
+      }
+      if (['e','r','l','E','R','L'].includes(event.key)) {
+        const menuVisible = document.querySelector('.menu') && getComputedStyle(document.querySelector('.menu')).display !== 'none';
+        if (menuVisible) {
+          const rb = document.getElementById('injectedRankingsBtn');
+          if (rb) { rb.click(); event.preventDefault(); }
+        }
+      }
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v14 */
+/* polytrack-extension-inline-v15 */
