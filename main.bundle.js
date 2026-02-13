@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v23";
+  const MARKER = "polytrack-extension-inline-v24";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -128,6 +128,21 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const arr=window.__polytrackDataLog||[]; arr.push(rec); if(arr.length>200) arr.shift(); window.__polytrackDataLog=arr;
     const fn=type==='error'?console.error:type==='warn'?console.warn:console.info; fn(LOG_PREFIX,msg,data||'');
   };
+
+  function getUiLanguage(){
+    const raw = String((navigator.languages && navigator.languages[0]) || navigator.language || 'en').toLowerCase();
+    return raw.split('-')[0] || 'en';
+  }
+  function tRankedWord(){
+    const map = { en:'Ranked', es:'Clasificado', fr:'Classé', de:'Rangliste', it:'Classifica', pt:'Ranqueado', ru:'Рейтинг', tr:'Sıralama', pl:'Ranking', nl:'Gerangschikt', sv:'Rankad', no:'Rangert', da:'Rangeret', fi:'Sijoitettu', cs:'Hodnocený', hu:'Rangsorolt', ro:'Clasament', uk:'Рейтинг', ja:'ランク', ko:'랭크', zh:'排位' };
+    const lang = getUiLanguage();
+    return map[lang] || 'Ranked';
+  }
+  function tRankingsTitle(){
+    const map = { en:'Overall Rankings', es:'Clasificación Global', fr:'Classement Global', de:'Gesamtrangliste', it:'Classifica Generale', pt:'Classificação Geral', ru:'Общий рейтинг', tr:'Genel Sıralama', pl:'Ranking Ogólny', ja:'総合ランキング', ko:'종합 랭킹', zh:'总排行榜' };
+    const lang = getUiLanguage();
+    return map[lang] || 'Overall Rankings';
+  }
 
   function isLocalApiCapableHost(){
     const host = String(window.location.hostname || '').toLowerCase();
@@ -412,7 +427,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       #overallHelpClose{cursor:pointer;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:7px 12px}
       .overall-entry{display:flex;align-items:center;padding:12px;background:var(--surface-tertiary-color,#192042);border:1px solid rgba(255,255,255,.08);opacity:0;transform:translateY(8px);animation:overallEntryIn .26s ease forwards}
       .overall-entry.top-3{border-color:rgba(255,217,89,.7);background:linear-gradient(90deg,rgba(255,217,89,.14),rgba(25,32,66,.9))}
-      .overall-rank{width:72px;text-align:center;font-size:28px;color:#82beff}
+      .overall-rank{width:72px;text-align:center;font-size:28px;color:#82beff}.overall-car{width:16px;height:16px;border-radius:50%;display:inline-block;margin-right:8px;border:1px solid rgba(255,255,255,.25);vertical-align:middle}
       .overall-name{flex:1;font-size:28px;padding:0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
       .overall-stats{text-align:right;min-width:220px}.overall-score{font-size:30px;color:#6fe1ff}.overall-races{font-size:16px;color:rgba(255,255,255,.6)}
       .staticFunPill{animation:staticGlowPulse 1.8s ease-in-out infinite}.staticFunHover{transition:transform .16s ease, filter .16s ease, box-shadow .16s ease}
@@ -507,13 +522,16 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     info.appendChild(credit);
     info.appendChild(document.createElement('br'));
     info.appendChild(privacy);
+    const container = document.querySelector('.main-buttons-container');
+    const visible = !!(container && getComputedStyle(container).display !== 'none');
+    info.style.display = visible ? '' : 'none';
   }
 
   function ensurePanel(){
     if (document.getElementById('overallLeaderboardPanel')) return;
     const panel = document.createElement('div');
     panel.id = 'overallLeaderboardPanel';
-    panel.innerHTML = '<div class="overall-shell" style="position:relative"><div class="overall-top"><h2>Overall Rankings</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" type="button">Help</button><button id="closeOverallLeaderboard" type="button">Close</button></div></div><p class="overall-sub">Performance score across all tracks. Lower is better (1.000 is best). Progress shown as tracks played /47.</p><div id="overallLeaderboardList"></div><div id="overallHelpPopup"><div class="overall-help-card"><h3>Rankings Help</h3><p>Need help? Contact us via Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>.</p><p>Suggestions are welcome through either method.</p><p class="small">Troubleshooting: refresh after updates, ensure storage is enabled, and verify network access if rankings do not update.</p><div class="overall-help-actions"><button id="overallHelpClose" type="button">Close</button></div></div></div></div>';
+    panel.innerHTML = `<div class="overall-shell" style="position:relative"><div class="overall-top"><h2>${tRankingsTitle()}</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" type="button">Help</button><button id="closeOverallLeaderboard" type="button">Close</button></div></div><p class="overall-sub">${tRankedWord()} performance score across all tracks. Lower is better (1.000 is best). Progress shown as tracks played /47.</p><div id="overallLeaderboardList"></div><div id="overallHelpPopup"><div class="overall-help-card"><h3>Rankings Help</h3><p>Need help? Contact us via Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>.</p><p>Suggestions are welcome through either method.</p><p class="small">Troubleshooting: refresh after updates, ensure storage is enabled, and verify network access if rankings do not update.</p><div class="overall-help-actions"><button id="overallHelpClose" type="button">Close</button></div></div></div></div>`;
     document.body.appendChild(panel);
     panel.addEventListener('click', (event)=>{ if (event.target === panel) panel.style.display='none'; });
     panel.querySelector('#closeOverallLeaderboard').addEventListener('click', ()=>{ panel.style.display='none'; });
@@ -643,7 +661,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           trackId,
           timeMs,
           createdAt: Number(row.createdAt || 0),
-          id: buildRecordingId(row, bestByTrackAndUser.size + 1)
+          id: buildRecordingId(row, bestByTrackAndUser.size + 1),
+          carColors: row.carColors || null
         });
       }
     }
@@ -659,8 +678,9 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       entries.sort((a,b)=>a.timeMs-b.timeMs);
       entries.forEach((entry, idx)=>{
         const rank = idx + 1;
-        const cur = userAgg.get(entry.userId) || { userId: entry.userId, name: entry.name, rankSum:0, tracks:new Set() };
+        const cur = userAgg.get(entry.userId) || { userId: entry.userId, name: entry.name, carColors: entry.carColors || null, rankSum:0, tracks:new Set() };
         cur.name = entry.name || cur.name;
+        cur.carColors = entry.carColors || cur.carColors;
         cur.rankSum += rank;
         cur.tracks.add(trackId);
         userAgg.set(entry.userId, cur);
@@ -676,7 +696,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const trackDepthBonus = 1 / (1 + Math.log2(1 + played));
       const uidTiebreak = ((String(u.userId).split('').reduce((acc, ch)=>acc + ch.charCodeAt(0), 0) % 997) + 1) / 1000000;
       const score = Math.max(1.000001, 1 + (Math.max(0, avgRank - 1) * fieldWeight) + (trackDepthBonus * 0.2) + uidTiebreak);
-      return { userId: u.userId, name: u.name, score, raceCount: played, totalTracks };
+      return { userId: u.userId, name: getLastKnownName(u.userId) || u.name, carColors: String(u.carColors || 'ffffff8ec7ff28346a212b58').slice(0,24), score, raceCount: played, totalTracks };
     }).sort((a,b)=>a.score-b.score || b.raceCount-a.raceCount || String(a.userId).localeCompare(String(b.userId)))
       .slice(0,50)
       .map((row, idx)=>({ rank: idx + 1, ...row }));
@@ -730,7 +750,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">Showing placeholder names and placeholder scores until real race data is available.</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
       return;
     }
-    listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${entry.name}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
+    listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name"><span class="overall-car" style="background:#${String(entry.carColors||'8ec7ff').replace(/[^0-9a-fA-F]/g,'').slice(0,6)||'8ec7ff'}"></span>${entry.name}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
   }
 
   async function openPanel(){
@@ -756,7 +776,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function makeUserPayload(){
     const stickyName = sanitizeDisplayName(localStorage.getItem(LAST_ACTIVE_NAME_KEY) || 'Guest');
     const stickyColors = String(localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '0,0,0,0,0,0').slice(0,64) || '0,0,0,0,0,0';
-    const accountId = resolveProfileAccountId({ name: stickyName, nickname: stickyName, carColors: stickyColors }, guestAccountId);
+    const stickyAccountId = String(localStorage.getItem('polytrack-active-account-id') || guestAccountId || '').slice(0,128);
+    const accountId = resolveProfileAccountId({ name: stickyName, nickname: stickyName, carColors: stickyColors, accountId: stickyAccountId }, stickyAccountId);
     return {
       id: 1,
       Id: 1,
@@ -776,7 +797,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     };
   }
 
-  function makeLeaderboardPayload(method, entries=[], position=1, previousPosition=1){
+  function makeLeaderboardPayload(method, entries=[], position=1, previousPosition=1, forcedUploadId=null, forcedUserEntryId=null){
     const normalizedEntries = enrichLegacyLeaderboardEntries(entries);
     const pos = safePositiveInt(position, 1);
     const prevPos = safePositiveInt(previousPosition, pos);
@@ -796,9 +817,11 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       success: true,
       verifiedState: 0,
       entry: normalizedEntries[0] || null,
-      userEntry: normalizedEntries[0] ? { id: normalizedEntries[0].id, position: pos, frames: normalizedEntries[0].frames || normalizedEntries[0].time?.numberOfFrames || 1 } : null
+      userEntry: null
     };
-    if (method === 'POST') base.uploadId = nextUploadId();
+    if (method === 'POST') base.uploadId = safeRecordingId(forcedUploadId) || nextUploadId();
+    const sourceUser = normalizedEntries.find((e)=>String(e.accountId||e.userId||'')===String(forcedUserEntryId||'')) || normalizedEntries[pos-1] || normalizedEntries[0] || null;
+    if (sourceUser) base.userEntry = { id: safeRecordingId(sourceUser.id) || safeRecordingId(forcedUploadId) || nextUploadId(), position: pos, frames: sourceUser.frames || sourceUser.time?.numberOfFrames || 1 };
     return base;
   }
 
@@ -822,6 +845,19 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           localStorage.setItem(LAST_ACTIVE_COLORS_KEY, safeColors);
         } catch {}
         setLastKnownName(accountId, safeName);
+        try { localStorage.setItem('polytrack-active-account-id', accountId); } catch {}
+        try {
+          const rows = readLocalRaceRows();
+          let changed = false;
+          for (const row of rows) {
+            if (String(row.accountId||row.userId||'') === String(accountId)) {
+              row.name = safeName;
+              row.carColors = safeColors;
+              changed = true;
+            }
+          }
+          if (changed) writeLocalRaceRows(rows);
+        } catch {}
         try {
           const d = await db();
           await d.collection('profiles_public').doc(accountId).set({ accountId, name: safeName, carColors: safeColors, updatedAt: Date.now() }, { merge: true });
@@ -833,14 +869,15 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const trackId = String(urlObj.searchParams.get('trackId') || '').slice(0,80);
       if (!trackId) return makeLeaderboardPayload(method);
       const hinted = parsePayload(body) || {};
+      let mirrorMeta = null;
       if (String(method).toUpperCase() === 'POST') {
-        try { await mirrorRaceResult(urlObj.toString(), body); } catch {}
+        try { mirrorMeta = await mirrorRaceResult(urlObj.toString(), body); } catch {}
       }
-      const accountId = resolveProfileAccountId(hinted, String(urlObj.searchParams.get('userTokenHash') || hinted.userTokenHash || hinted.userId || hinted.accountId || guestAccountId));
+      const accountId = resolveProfileAccountId(hinted, String(urlObj.searchParams.get('userTokenHash') || hinted.userTokenHash || hinted.userId || hinted.accountId || mirrorMeta?.accountId || localStorage.getItem('polytrack-active-account-id') || guestAccountId));
       const entries = await getTrackEntries(trackId, Math.min(100, Number(urlObj.searchParams.get('amount') || 20) || 20)).catch(()=>[]);
       const mine = entries.find((e)=>String(e.accountId||'')===String(accountId||''));
-      const myPos = safePositiveInt(mine?.rank || 1, 1);
-      return makeLeaderboardPayload(method, entries, myPos, myPos);
+      const myPos = safePositiveInt(mine?.rank || mine?.position || 1, 1);
+      return makeLeaderboardPayload(method, entries, myPos, myPos, mirrorMeta?.uploadId || null, accountId);
     }
 
     if (urlObj.pathname === '/recordings') {
@@ -896,7 +933,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   async function mirrorRaceResult(url, body){
     const payload = parsePayload(body); if (!payload) return;
-    const hintedAccountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || guestAccountId || '').slice(0,128);
+    const hintedAccountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || localStorage.getItem('polytrack-active-account-id') || guestAccountId || '').slice(0,128);
     const accountId = resolveProfileAccountId(payload, hintedAccountId);
     const trackId = String(payload.trackId || '').slice(0,80);
     let name = sanitizeDisplayName(payload.name || payload.nickname || localStorage.getItem(LAST_ACTIVE_NAME_KEY) || 'Player');
@@ -904,6 +941,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if ((!name || name === 'Deleted') && known) name = known;
     name = await enforceSafeDisplayName(name, accountId);
     setLastKnownName(accountId, name);
+    try { localStorage.setItem('polytrack-active-account-id', accountId); } catch {}
     const directFrames = safePositiveInt(payload.frames || payload.numberOfFrames || payload.raceTimeFrames || payload.time?.numberOfFrames || 0, 0);
     const maybeTimeMs = Number(payload.timeMs || 0);
     const maybeTime = Number(payload.time || 0);
@@ -918,20 +956,20 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
               ? maybeTotal
               : (frames > 0 ? Math.round((frames * 1000) / 60) : 0)));
     const replaySig = String(payload.replayHash || payload.uploadId || '').slice(0,128);
+    const carColors = String(payload.carColors || payload.CarColors || localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '').slice(0,64) || null;
     const mirrorSig = `${accountId}|${trackId}|${timeMs}|${frames}|${replaySig}`;
     if (mirrorSig === lastMirrorSig && Date.now() - lastMirrorAt < 4000) {
       log('info','Skipped duplicate race mirror',{accountId,trackId,timeMs});
-      return;
+      return { accountId, trackId, uploadId: safeRecordingId(payload.uploadId) || null, timeMs, frames, name, carColors };
     }
     if (!accountId || !trackId || !Number.isFinite(timeMs) || timeMs <= 0 || !Number.isSafeInteger(frames) || frames <= 0) {
       log('warn','Skipped race mirror due to invalid payload',{accountId:!!accountId,trackId:!!trackId,timeMs});
-      return;
+      return { accountId, trackId, uploadId: null, timeMs, frames, name, carColors };
     }
     const createdAt = Date.now();
     const uploadId = safeRecordingId(payload.uploadId) || nextUploadId();
     const carId = String(payload.car || payload.carId || payload.carName || '').slice(0,64) || null;
-    const carColors = String(payload.carColors || payload.CarColors || '').slice(0,64) || null;
-    addLocalRaceRow({ accountId, userId: accountId, trackId, name, timeMs, frames, raceTimeFrames: frames, uploadId, replayHash: replaySig || null, replay: payload.replay || payload.replayData || null, carId, carColors, createdAt, verifiedState: Number(payload.verifiedState || 0) || 0 });
+        addLocalRaceRow({ accountId, userId: accountId, trackId, name, timeMs, frames, raceTimeFrames: frames, uploadId, replayHash: replaySig || null, replay: payload.replay || payload.replayData || null, carId, carColors, createdAt, verifiedState: Number(payload.verifiedState || 0) || 0 });
     writeRecordingStore(uploadId, { recording: payload.replay || payload.replayData || '', frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: carColors || undefined });
     try {
       const d = await db();
@@ -975,6 +1013,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       }
       await d.collection('system').doc('last_race_ingest').set({ accountId, trackId, timeMs, updatedAt: createdAt }, { merge: true });
       log('info','Race mirrored to Firestore',{accountId,trackId,timeMs,name});
+      return { accountId, trackId, uploadId, timeMs, frames, name, carColors };
 
     } catch (error) {
       if (!isLocalApiCapableHost()) {
@@ -983,7 +1022,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           trackId,
           accountId
         });
-        return;
+        return { accountId, trackId, uploadId, timeMs, frames, name, carColors };
       }
       try {
         const res = await fetch('/api/race-result', {
@@ -996,6 +1035,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         } else {
           log('warn','Race mirror API fallback rejected',{status:res.status,trackId,accountId});
         }
+      return { accountId, trackId, uploadId, timeMs, frames, name, carColors };
       } catch (fallbackError) {
         log('error','Race mirror failed in both Firestore and API fallback', {
           firestoreError: String(error && (error.message || error)),
@@ -1005,6 +1045,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         });
       }
     }
+    return { accountId, trackId, uploadId, timeMs, frames, name, carColors };
   }
 
 
@@ -1014,7 +1055,6 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const method = String(options.method || 'GET').toUpperCase();
       const rawUrl = typeof url === 'string' ? url : String(url || '');
       const urlObj = parseTarget(rawUrl);
-      if (urlObj?.pathname === '/leaderboard' && method === 'POST') mirrorRaceResult(urlObj.toString(), options.body);
       if (shouldMock(urlObj)) {
         const payload = await mockPayload(urlObj, method, options.body);
         return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -1038,7 +1078,6 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       return originalOpen.call(this, method, url, ...rest);
     };
     XMLHttpRequest.prototype.send = function(body){
-      if (this.__extUrlObj?.pathname === '/leaderboard' && this.__extMethod === 'POST') mirrorRaceResult(this.__extUrlObj.toString(), body);
       if (this.__extMockDynamic) {
         mockPayload(this.__extUrlObj, this.__extMethod, body).then((payload)=>{
           this.__extBlobUrl = URL.createObjectURL(new Blob([JSON.stringify(payload)], { type: 'application/json' }));
@@ -1077,7 +1116,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       button.classList.remove('button-spawn');
       button.style.animation = 'none';
     }
-    button.innerHTML = '<img src="images/trophy.svg"><p>Rankings</p>';
+    button.innerHTML = `<img src="images/trophy.svg"><p>${tRankedWord()}</p>`;
     button.addEventListener('click', (event)=>{ event.preventDefault(); event.stopPropagation(); openPanel(); });
     button.style.order = '999';
     rankingsButtonRef = button;
@@ -1169,4 +1208,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v23 */
+/* polytrack-extension-inline-v24 */
