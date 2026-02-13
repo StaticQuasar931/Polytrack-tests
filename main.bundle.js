@@ -63,6 +63,56 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     return created;
   }
   const guestAccountId = getOrCreateGuestAccountId();
+  const PROFILE_MAP_KEY = 'polytrack-profile-id-map-v1';
+
+  function readProfileMap(){
+    try {
+      const raw = localStorage.getItem(PROFILE_MAP_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return {
+        byName: parsed?.byName && typeof parsed.byName === 'object' ? parsed.byName : {},
+        bySignature: parsed?.bySignature && typeof parsed.bySignature === 'object' ? parsed.bySignature : {}
+      };
+    } catch { return { byName:{}, bySignature:{} }; }
+  }
+
+  function writeProfileMap(map){
+    try { localStorage.setItem(PROFILE_MAP_KEY, JSON.stringify(map)); } catch {}
+  }
+
+  function normalizedNameKey(value){
+    return String(value || '').trim().toLowerCase().slice(0, 40);
+  }
+
+  function makeProfileSignature(payload){
+    const colors = String(payload?.carColors || payload?.CarColors || '').trim();
+    const carId = String(payload?.car || payload?.carId || payload?.carName || '').trim();
+    const sig = [colors, carId].filter(Boolean).join('|').slice(0, 120);
+    return sig || '';
+  }
+
+  function makeGeneratedProfileId(){
+    return `guest-${Date.now().toString(36)}-${randomGuestSuffix()}`.slice(0, 128);
+  }
+
+  function resolveProfileAccountId(payload, suggestedId){
+    const suggested = String(suggestedId || '').slice(0, 128);
+    const strongSuggested = suggested && !/^guest-/.test(suggested);
+    if (strongSuggested) return suggested;
+    const nameKey = normalizedNameKey(payload?.name || payload?.nickname || 'guest');
+    const signature = makeProfileSignature(payload);
+    const map = readProfileMap();
+    let resolved = '';
+    if (signature && map.bySignature[signature]) resolved = map.bySignature[signature];
+    else if (nameKey && map.byName[nameKey]) resolved = map.byName[nameKey];
+    else if (Object.keys(map.byName).length === 0 && suggested) resolved = suggested;
+    else resolved = makeGeneratedProfileId();
+    if (nameKey) map.byName[nameKey] = resolved;
+    if (signature) map.bySignature[signature] = resolved;
+    writeProfileMap(map);
+    return resolved;
+  }
+
   const BRAND_FP = `${q0}${q1}${q2}${q3}`;
   const WARN_FP = `${p0}${p1}`;
   const TOTAL_TRACKS = 47;
@@ -323,12 +373,72 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     })).sort((a,b)=>a.rank-b.rank);
   }
 
+  function computeOverallFromRaceRows(rows){
+    const bestByTrackAndUser = new Map();
+    for (const row of rows) {
+      const userId = String(row.accountId || row.userId || '').slice(0, 128);
+      const trackId = String(row.trackId || '').slice(0, 80);
+      if (!userId || !trackId) continue;
+      const timeMs = Number(row.timeMs || 0);
+      if (!Number.isFinite(timeMs) || timeMs <= 0) continue;
+      const key = `${trackId}::${userId}`;
+      const prev = bestByTrackAndUser.get(key);
+      if (!prev || timeMs < prev.timeMs) {
+        bestByTrackAndUser.set(key, {
+          userId,
+          name: String(row.name || 'Guest').slice(0,24),
+          trackId,
+          timeMs,
+          createdAt: Number(row.createdAt || 0)
+        });
+      }
+    }
+
+    const tracks = new Map();
+    for (const row of bestByTrackAndUser.values()) {
+      if (!tracks.has(row.trackId)) tracks.set(row.trackId, []);
+      tracks.get(row.trackId).push(row);
+    }
+
+    const userAgg = new Map();
+    for (const [trackId, entries] of tracks.entries()) {
+      entries.sort((a,b)=>a.timeMs-b.timeMs);
+      entries.forEach((entry, idx)=>{
+        const rank = idx + 1;
+        const cur = userAgg.get(entry.userId) || { userId: entry.userId, name: entry.name, rankSum:0, tracks:new Set() };
+        cur.name = entry.name || cur.name;
+        cur.rankSum += rank;
+        cur.tracks.add(trackId);
+        userAgg.set(entry.userId, cur);
+      });
+    }
+
+    const totalTracks = TOTAL_TRACKS;
+    const out = Array.from(userAgg.values()).map((u)=>{
+      const played = u.tracks.size;
+      const avgRank = u.rankSum / Math.max(played, 1);
+      const score = Math.max(1, avgRank + Math.max(totalTracks - played, 0) * 2);
+      return { name: u.name, score, raceCount: played, totalTracks };
+    }).sort((a,b)=>a.score-b.score || b.raceCount-a.raceCount)
+      .slice(0,100)
+      .map((row, idx)=>({ rank: idx + 1, ...row }));
+    return out;
+  }
+
   async function fetchOverallEntries(){
     try {
       const d = await db();
       const snap = await d.collection('leaderboards_overall').doc('main').get();
       const data = snap.data() || {};
-      return normalizeEntries(data.entries || []);
+      const direct = normalizeEntries(data.entries || []);
+      if (direct.length) return direct;
+      const racesSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(2500).get();
+      const rows = racesSnap.docs.map((doc)=>doc.data() || {});
+      const computed = normalizeEntries(computeOverallFromRaceRows(rows));
+      if (computed.length) {
+        d.collection('leaderboards_overall').doc('main').set({ entries: computed, updatedAt: Date.now(), seededBy: MARKER }, { merge: true }).catch(()=>{});
+      }
+      return computed;
     } catch (error) {
       try {
         const res = await fetch('/api/overall-leaderboard', { cache: 'no-store' });
@@ -380,13 +490,14 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
 
   function makeUserPayload(){
+    const accountId = resolveProfileAccountId({ name: 'Guest', nickname: 'Guest', carColors: '0,0,0,0,0,0' }, guestAccountId);
     return {
       id: 1,
       Id: 1,
-      userId: guestAccountId,
-      accountId: guestAccountId,
-      userTokenHash: guestAccountId,
-      tokenHash: guestAccountId,
+      userId: accountId,
+      accountId,
+      userTokenHash: accountId,
+      tokenHash: accountId,
       name:'Guest',
       nickname:'Guest',
       carColors:'0,0,0,0,0,0',
@@ -464,7 +575,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   async function mirrorRaceResult(url, body){
     const payload = parsePayload(body); if (!payload) return;
-    const accountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || guestAccountId || '').slice(0,128);
+    const hintedAccountId = String(payload.userTokenHash || payload.userId || payload.tokenHash || payload.accountId || guestAccountId || '').slice(0,128);
+    const accountId = resolveProfileAccountId(payload, hintedAccountId);
     const trackId = String(payload.trackId || '').slice(0,80);
     const name = String(payload.name || payload.nickname || 'Player').slice(0,24);
     const timeMs = Number(payload.timeMs || payload.time || payload.total || payload.frames || 0);
@@ -475,6 +587,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     try {
       const d = await db();
       const createdAt = Date.now();
+      const carId = String(payload.car || payload.carId || payload.carName || '').slice(0,64) || null;
+      const carColors = String(payload.carColors || payload.CarColors || '').slice(0,64) || null;
       await d.collection('race_results').add({
         accountId,
         trackId,
@@ -482,16 +596,23 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         timeMs,
         replay: payload.replay || payload.replayData || null,
         replayHash: String(payload.replayHash || payload.uploadId || '').slice(0,128) || null,
-        carId: String(payload.car || payload.carId || payload.carName || '').slice(0,64) || null,
-        carColors: String(payload.carColors || payload.CarColors || '').slice(0,64) || null,
+        carId,
+        carColors,
         raceTimeFrames: Number(payload.frames || payload.numberOfFrames || 0) || null,
         uploadId: Number(payload.uploadId) || null,
         verified: Boolean(payload.isVerified ?? payload.verified ?? false),
         createdAt,
         source: String(url || '').slice(0,500)
       });
+      await d.collection('profiles_public').doc(accountId).set({
+        accountId,
+        name,
+        carId,
+        carColors,
+        updatedAt: createdAt
+      }, { merge: true });
       await d.collection('system').doc('last_race_ingest').set({ accountId, trackId, timeMs, updatedAt: createdAt }, { merge: true });
-      log('info','Race mirrored to Firestore',{accountId,trackId,timeMs});
+      log('info','Race mirrored to Firestore',{accountId,trackId,timeMs,name});
 
     } catch (error) {
       if (!isLocalApiCapableHost()) {
