@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v24";
+  const MARKER = "polytrack-extension-inline-v25";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -415,8 +415,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       .overall-top{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:2px solid rgba(255,255,255,.14)}
       .overall-top h2{margin:0;font-size:40px;font-weight:normal;color:#8ec7ff}
       .overall-sub{margin:0;padding:0 22px 14px;color:rgba(255,255,255,.72);font-size:18px}
-      #closeOverallLeaderboard,#overallHelpBtn{cursor:pointer;font-size:17px;border:1px solid rgba(142,199,255,.45);background:rgba(20,35,75,.55);padding:8px 12px;color:#bde2ff;transition:transform .12s ease, filter .12s ease}
-      #closeOverallLeaderboard:hover,#overallHelpBtn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+      #closeOverallLeaderboard,#overallHelpBtn{cursor:pointer;transition:transform .12s ease, filter .12s ease, box-shadow .12s ease}
+      #closeOverallLeaderboard:hover,#overallHelpBtn:hover{transform:translateY(-1px);filter:brightness(1.08);box-shadow:0 0 12px rgba(142,199,255,.25)}
       #overallLeaderboardList{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
       #overallHelpPopup{display:none;position:absolute;inset:0;background:rgba(9,13,30,.78);backdrop-filter:blur(2px);align-items:center;justify-content:center;z-index:3}
       .overall-help-card{max-width:560px;background:linear-gradient(180deg,#24305f,#1a244b);border:1px solid rgba(255,255,255,.2);padding:16px 18px;box-shadow:0 12px 28px rgba(0,0,0,.4)}
@@ -531,7 +531,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (document.getElementById('overallLeaderboardPanel')) return;
     const panel = document.createElement('div');
     panel.id = 'overallLeaderboardPanel';
-    panel.innerHTML = `<div class="overall-shell" style="position:relative"><div class="overall-top"><h2>${tRankingsTitle()}</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" type="button">Help</button><button id="closeOverallLeaderboard" type="button">Close</button></div></div><p class="overall-sub">${tRankedWord()} performance score across all tracks. Lower is better (1.000 is best). Progress shown as tracks played /47.</p><div id="overallLeaderboardList"></div><div id="overallHelpPopup"><div class="overall-help-card"><h3>Rankings Help</h3><p>Need help? Contact us via Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>.</p><p>Suggestions are welcome through either method.</p><p class="small">Troubleshooting: refresh after updates, ensure storage is enabled, and verify network access if rankings do not update.</p><div class="overall-help-actions"><button id="overallHelpClose" type="button">Close</button></div></div></div></div>`;
+    panel.innerHTML = `<div class="overall-shell" style="position:relative"><div class="overall-top"><h2>${tRankingsTitle()}</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" class="button" type="button">Help</button><button id="closeOverallLeaderboard" class="button" type="button">Close</button></div></div><p class="overall-sub">${tRankedWord()} performance score across all tracks. Lower is better (1.000 is best). Progress shown as tracks played /47.</p><div id="overallLeaderboardList"></div><div id="overallHelpPopup"><div class="overall-help-card"><h3>Rankings Help</h3><p>Need help? Contact us via Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>.</p><p>Suggestions are welcome through either method.</p><p class="small">Troubleshooting: refresh after updates, ensure storage is enabled, and verify network access if rankings do not update.</p><div class="overall-help-actions"><button id="overallHelpClose" type="button">Close</button></div></div></div></div>`;
     document.body.appendChild(panel);
     panel.addEventListener('click', (event)=>{ if (event.target === panel) panel.style.display='none'; });
     panel.querySelector('#closeOverallLeaderboard').addEventListener('click', ()=>{ panel.style.display='none'; });
@@ -624,7 +624,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const doc = await d.collection('leaderboards_track').doc(String(trackId)).get();
       const data = doc.data() || {};
       entries = Array.isArray(data.entries) ? data.entries : [];
-      const snap = await d.collection('race_results').where('trackId','==',String(trackId)).orderBy('createdAt','desc').limit(3000).get();
+      const snap = await d.collection('race_results').orderBy('createdAt','desc').limit(3000).get();
       const cloudRows = snap.docs.map((x)=>x.data() || {});
       const computed = computeTrackTopEntries(cloudRows, trackId, Math.max(100, limit));
       if (computed.length) entries = computed;
@@ -741,13 +741,13 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (!listEl) return;
     if (!entries.length){
       const placeholders = [
-        { rank:1, name:'Placeholder Driver', score:1.000, raceCount:12, totalTracks:47 },
-        { rank:2, name:'Sample Racer', score:1.012, raceCount:11, totalTracks:47 },
-        { rank:3, name:'Demo Pilot', score:1.026, raceCount:10, totalTracks:47 },
-        { rank:4, name:'Test Chassis', score:1.040, raceCount:9, totalTracks:47 },
-        { rank:5, name:'Ghost Entry', score:1.012, raceCount:8, totalTracks:47 }
+        { rank:1, name:'Placeholder Driver', carColors:'8ec7ff', score:1.000, raceCount:12, totalTracks:47 },
+        { rank:2, name:'Sample Racer', carColors:'ff9f43', score:1.012, raceCount:11, totalTracks:47 },
+        { rank:3, name:'Demo Pilot', carColors:'7bed9f', score:1.026, raceCount:10, totalTracks:47 },
+        { rank:4, name:'Test Chassis', carColors:'70a1ff', score:1.040, raceCount:9, totalTracks:47 },
+        { rank:5, name:'Ghost Entry', carColors:'eccc68', score:1.012, raceCount:8, totalTracks:47 }
       ];
-      listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">Showing placeholder names and placeholder scores until real race data is available.</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
+      listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">Showing placeholder names and placeholder scores until real race data is available.</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name"><span class="overall-car" style="background:#${String(entry.carColors||'8ec7ff').replace(/[^0-9a-fA-F]/g,'').slice(0,6)||'8ec7ff'}"></span>${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
       return;
     }
     listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name"><span class="overall-car" style="background:#${String(entry.carColors||'8ec7ff').replace(/[^0-9a-fA-F]/g,'').slice(0,6)||'8ec7ff'}"></span>${entry.name}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
@@ -830,7 +830,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const path = urlObj.pathname;
     const isLegacyPath = path === '/user' || path === '/leaderboard' || path === '/recordings';
     if (!isLegacyPath) return false;
-    return urlObj.host === 'vps.kodub.com';
+    const host = String(urlObj.host || '').toLowerCase();
+    return host === 'vps.kodub.com' || host.endsWith('.kodub.com') || host === 'kodub.com';
   }
 
   async function mockPayload(urlObj, method, body){
@@ -886,7 +887,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       if (ids.length && fromLocal.some((x)=>x)) return fromLocal;
       try {
         const d = await db();
-        const snaps = await Promise.all(ids.map((id)=>d.collection('race_results').where('uploadId','==',id).orderBy('createdAt','desc').limit(1).get()));
+        const snaps = await Promise.all(ids.map((id)=>d.collection('race_results').where('uploadId','==',id).limit(1).get()));
         return snaps.map((snap)=>{
           const row = snap?.docs?.[0]?.data?.() || null;
           if (!row) return null;
@@ -1105,13 +1106,16 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     button = document.createElement('button');
     button.id = 'injectedRankingsBtn';
     button.className = 'button button-image';
+    const existing = container.querySelectorAll('button.button-image');
+    button.style.animationDelay = (0.3 + existing.length * 0.1).toFixed(1) + 's';
+    container.appendChild(button);
     if (!rankingsSpawnedOnce) {
-      button.classList.add('button-spawn');
-      const existing = container.querySelectorAll('button.button-image');
-      button.style.animationDelay = (0.3 + existing.length * 0.1).toFixed(1) + 's';
-      rankingsSpawnedOnce = true;
-      window.__polytrackRankingsAnimated = true;
-      setTimeout(()=>{ try { button.classList.remove('button-spawn'); } catch {} }, 1300);
+      requestAnimationFrame(()=>{
+        button.classList.add('button-spawn');
+        rankingsSpawnedOnce = true;
+        window.__polytrackRankingsAnimated = true;
+        setTimeout(()=>{ try { button.classList.remove('button-spawn'); } catch {} }, 1300);
+      });
     } else {
       button.classList.remove('button-spawn');
       button.style.animation = 'none';
@@ -1120,7 +1124,6 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     button.addEventListener('click', (event)=>{ event.preventDefault(); event.stopPropagation(); openPanel(); });
     button.style.order = '999';
     rankingsButtonRef = button;
-    container.appendChild(button);
   }
 
   function install(){
@@ -1208,4 +1211,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v24 */
+/* polytrack-extension-inline-v25 */
