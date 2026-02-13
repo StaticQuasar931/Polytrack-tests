@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v22";
+  const MARKER = "polytrack-extension-inline-v23";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -572,7 +572,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           carId: row.carId || null,
           carColors: row.carColors || null,
           createdAt: Number(row.createdAt || 0),
-          id: buildRecordingId(row, bestByTrackAndUser.size + 1)
+          id: buildRecordingId(row, bestByUser.size + 1)
         });
       }
     }
@@ -601,34 +601,25 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   async function getTrackEntries(trackId, limit=10){
     let entries = [];
-    let cloudRows = [];
     try {
       const d = await db();
       const doc = await d.collection('leaderboards_track').doc(String(trackId)).get();
       const data = doc.data() || {};
       entries = Array.isArray(data.entries) ? data.entries : [];
       const snap = await d.collection('race_results').where('trackId','==',String(trackId)).orderBy('createdAt','desc').limit(3000).get();
-      cloudRows = snap.docs.map((x)=>x.data() || {});
+      const cloudRows = snap.docs.map((x)=>x.data() || {});
       const computed = computeTrackTopEntries(cloudRows, trackId, Math.max(100, limit));
       if (computed.length) entries = computed;
       if (entries.length) {
         d.collection('leaderboards_track').doc(String(trackId)).set({ trackId: String(trackId), entries, updatedAt: Date.now() }, { merge:true }).catch(()=>{});
       }
-    } catch {}
-
-    const localRows = readLocalRaceRows().filter((row)=>String(row.trackId||'')===String(trackId||''));
-    const localEntries = computeTrackTopEntries(localRows, trackId, Math.max(100, limit));
-    const merged = [];
-    const byUser = new Map();
-    for (const e of [...entries, ...localEntries]) {
-      const uid = String(e.accountId || e.userId || '');
-      if (!uid) continue;
-      const prev = byUser.get(uid);
-      if (!prev || Number(e.timeMs||Infinity) < Number(prev.timeMs||Infinity)) byUser.set(uid, e);
+    } catch {
+      const localRows = readLocalRaceRows().filter((row)=>String(row.trackId||'')===String(trackId||''));
+      entries = computeTrackTopEntries(localRows, trackId, Math.max(100, limit));
     }
-    merged.push(...byUser.values());
-    merged.sort((a,b)=>Number(a.timeMs||Infinity)-Number(b.timeMs||Infinity));
-    const ranked = merged.map((entry, idx)=>({ ...entry, rank: idx + 1, position: idx + 1 }));
+    const ranked = entries
+      .sort((a,b)=>Number(a.timeMs||Infinity)-Number(b.timeMs||Infinity))
+      .map((entry, idx)=>({ ...entry, rank: idx + 1, position: idx + 1 }));
     const hydrated = await hydrateDisplayNames(ranked);
     return hydrated.slice(0, limit);
   }
@@ -702,8 +693,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       direct = normalizeEntries(data.entries || []);
       const racesSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(5000).get();
       cloudRows = racesSnap.docs.map((doc)=>doc.data() || {});
-      const combinedRows = [...cloudRows, ...readLocalRaceRows()];
-      const computed = normalizeEntries(computeOverallFromRaceRows(combinedRows));
+      const computed = normalizeEntries(computeOverallFromRaceRows(cloudRows));
       const best = computed.length ? computed : direct;
       if (computed.length) {
         d.collection('leaderboards_overall').doc('main').set({ entries: computed, updatedAt: Date.now(), seededBy: MARKER }, { merge: true }).catch(()=>{});
@@ -719,8 +709,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           }
         } catch {}
       }
-      const combinedRows = [...cloudRows, ...readLocalRaceRows()];
-      if (combinedRows.length) return normalizeEntries(computeOverallFromRaceRows(combinedRows));
+      const localRows = readLocalRaceRows();
+      if (localRows.length) return normalizeEntries(computeOverallFromRaceRows(localRows));
       console.warn('Failed to load overall leaderboard:', error);
       return direct || [];
     }
@@ -1082,6 +1072,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       button.style.animationDelay = (0.3 + existing.length * 0.1).toFixed(1) + 's';
       rankingsSpawnedOnce = true;
       window.__polytrackRankingsAnimated = true;
+      setTimeout(()=>{ try { button.classList.remove('button-spawn'); } catch {} }, 1300);
     } else {
       button.classList.remove('button-spawn');
       button.style.animation = 'none';
@@ -1178,4 +1169,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v22 */
+/* polytrack-extension-inline-v23 */
