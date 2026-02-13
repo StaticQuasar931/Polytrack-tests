@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v20";
+  const MARKER = "polytrack-extension-inline-v21";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -41,7 +41,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   const p0='c3e7',p1='8a14';
 
   let firestorePromise = null;
-  let rankingsSpawnedOnce = window.__polytrackRankingsAnimated === true;
+  let rankingsSpawnedOnce = window.__polytrackRankingsAnimated === true || sessionStorage.getItem('polytrack-rankings-animated') === '1';
   let rankingsButtonRef = null;
   let localUploadCounter = Number(localStorage.getItem('polytrack-upload-counter') || '0') || 0;
   const GUEST_ID_KEY = 'polytrack-guest-account-id';
@@ -193,6 +193,23 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     } catch {
       return ids.map(()=>null);
     }
+  }
+
+  const LOCAL_RACE_STORE_KEY = 'polytrack-local-race-results-v1';
+  function readLocalRaceRows(){
+    try {
+      const raw = localStorage.getItem(LOCAL_RACE_STORE_KEY);
+      const rows = raw ? JSON.parse(raw) : [];
+      return Array.isArray(rows) ? rows : [];
+    } catch { return []; }
+  }
+  function writeLocalRaceRows(rows){
+    try { localStorage.setItem(LOCAL_RACE_STORE_KEY, JSON.stringify(rows.slice(0, 5000))); } catch {}
+  }
+  function addLocalRaceRow(row){
+    const rows = readLocalRaceRows();
+    rows.unshift(row);
+    writeLocalRaceRows(rows);
   }
 
   function enrichLegacyLeaderboardEntries(entries){
@@ -555,7 +572,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           carId: row.carId || null,
           carColors: row.carColors || null,
           createdAt: Number(row.createdAt || 0),
-          id: buildRecordingId(row, bestByUser.size + 1)
+          id: buildRecordingId(row, bestByTrackAndUser.size + 1)
         });
       }
     }
@@ -583,17 +600,23 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
 
   async function getTrackEntries(trackId, limit=10){
-    const d = await db();
-    const doc = await d.collection('leaderboards_track').doc(String(trackId)).get();
-    const data = doc.data() || {};
-    let entries = Array.isArray(data.entries) ? data.entries : [];
-    if (!entries.length) {
-      const snap = await d.collection('race_results').orderBy('createdAt','desc').limit(3000).get();
-      const rows = snap.docs.map((x)=>x.data() || {});
-      entries = computeTrackTopEntries(rows, trackId, Math.max(100, limit));
-      if (entries.length) {
-        d.collection('leaderboards_track').doc(String(trackId)).set({ trackId: String(trackId), entries, updatedAt: Date.now() }, { merge:true }).catch(()=>{});
+    let entries = [];
+    try {
+      const d = await db();
+      const doc = await d.collection('leaderboards_track').doc(String(trackId)).get();
+      const data = doc.data() || {};
+      entries = Array.isArray(data.entries) ? data.entries : [];
+      if (!entries.length) {
+        const snap = await d.collection('race_results').orderBy('createdAt','desc').limit(3000).get();
+        const rows = snap.docs.map((x)=>x.data() || {});
+        entries = computeTrackTopEntries(rows, trackId, Math.max(100, limit));
+        if (entries.length) {
+          d.collection('leaderboards_track').doc(String(trackId)).set({ trackId: String(trackId), entries, updatedAt: Date.now() }, { merge:true }).catch(()=>{});
+        }
       }
+    } catch {
+      const localRows = readLocalRaceRows();
+      entries = computeTrackTopEntries(localRows, trackId, Math.max(100, limit));
     }
     const hydrated = await hydrateDisplayNames(entries);
     return hydrated.slice(0, limit);
@@ -618,7 +641,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           trackId,
           timeMs,
           createdAt: Number(row.createdAt || 0),
-          id: buildRecordingId(row, bestByUser.size + 1)
+          id: buildRecordingId(row, bestByTrackAndUser.size + 1)
         });
       }
     }
@@ -673,13 +696,17 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       }
       return best;
     } catch (error) {
-      try {
-        const res = await fetch('/api/overall-leaderboard', { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          return normalizeEntries(data.entries || []);
-        }
-      } catch {}
+      if (isLocalApiCapableHost()) {
+        try {
+          const res = await fetch('/api/overall-leaderboard', { cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            return normalizeEntries(data.entries || []);
+          }
+        } catch {}
+      }
+      const localRows = readLocalRaceRows();
+      if (localRows.length) return normalizeEntries(computeOverallFromRaceRows(localRows));
       console.warn('Failed to load overall leaderboard:', error);
       return [];
     }
@@ -893,13 +920,15 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       log('warn','Skipped race mirror due to invalid payload',{accountId:!!accountId,trackId:!!trackId,timeMs});
       return;
     }
+    const createdAt = Date.now();
+    const uploadId = safeRecordingId(payload.uploadId) || nextUploadId();
+    const carId = String(payload.car || payload.carId || payload.carName || '').slice(0,64) || null;
+    const carColors = String(payload.carColors || payload.CarColors || '').slice(0,64) || null;
+    addLocalRaceRow({ accountId, userId: accountId, trackId, name, timeMs, frames, raceTimeFrames: frames, uploadId, replayHash: replaySig || null, replay: payload.replay || payload.replayData || null, carId, carColors, createdAt, verifiedState: Number(payload.verifiedState || 0) || 0 });
+    writeRecordingStore(uploadId, { recording: payload.replay || payload.replayData || '', frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: carColors || undefined });
     try {
       const d = await db();
-      const createdAt = Date.now();
-      const carId = String(payload.car || payload.carId || payload.carName || '').slice(0,64) || null;
-      const carColors = String(payload.carColors || payload.CarColors || '').slice(0,64) || null;
-      const uploadId = safeRecordingId(payload.uploadId) || nextUploadId();
-      lastMirrorSig = mirrorSig;
+            lastMirrorSig = mirrorSig;
       lastMirrorAt = Date.now();
       await d.collection('race_results').add({
         accountId,
@@ -917,7 +946,6 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         createdAt,
         source: String(url || '').slice(0,500)
       });
-      writeRecordingStore(uploadId, { recording: payload.replay || payload.replayData || '', frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: carColors || undefined });
       await d.collection('profiles_public').doc(accountId).set({
         accountId,
         name,
@@ -944,7 +972,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
     } catch (error) {
       if (!isLocalApiCapableHost()) {
-        log('error','Race mirror failed: Firestore unavailable and no local API on this host', {
+        log('warn','Firestore write blocked; using local-only cached race data', {
           firestoreError: String(error && (error.message || error)),
           trackId,
           accountId
@@ -955,7 +983,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         const res = await fetch('/api/race-result', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trackId, accountId, userId: accountId, name, timeMs })
+          body: JSON.stringify({ trackId, accountId, userId: accountId, name, timeMs, frames })
         });
         if (res.ok) {
           log('info','Race mirror API fallback accepted',{status:res.status,trackId,accountId});
@@ -1038,6 +1066,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       button.style.animationDelay = (0.3 + existing.length * 0.1).toFixed(1) + 's';
       rankingsSpawnedOnce = true;
       window.__polytrackRankingsAnimated = true;
+      try { sessionStorage.setItem('polytrack-rankings-animated','1'); } catch {}
     } else {
       button.classList.remove('button-spawn');
       button.style.animation = 'none';
@@ -1134,4 +1163,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v20 */
+/* polytrack-extension-inline-v21 */
