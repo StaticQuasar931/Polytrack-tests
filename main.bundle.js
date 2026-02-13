@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v25";
+  const MARKER = "polytrack-extension-inline-v26";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -101,6 +101,18 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     return `guest-${Date.now().toString(36)}-${randomGuestSuffix()}`.slice(0, 128);
   }
 
+  function makeRandomCarColors(){
+    const rand = ()=>Math.floor(Math.random()*256).toString(16).padStart(2,'0');
+    return `${rand()}${rand()}${rand()}${rand()}${rand()}${rand()}${rand()}${rand()}${rand()}${rand()}${rand()}${rand()}`.slice(0,24);
+  }
+  function getOrCreateInitialCarColors(){
+    const existing = String(localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '').replace(/[^0-9a-fA-F]/g,'').slice(0,24);
+    if (existing.length >= 24) return existing;
+    const created = makeRandomCarColors();
+    try { localStorage.setItem(LAST_ACTIVE_COLORS_KEY, created); } catch {}
+    return created;
+  }
+
   function resolveProfileAccountId(payload, suggestedId){
     const suggested = String(suggestedId || '').slice(0, 128);
     const strongSuggested = suggested && !/^guest-/.test(suggested);
@@ -133,16 +145,24 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const raw = String((navigator.languages && navigator.languages[0]) || navigator.language || 'en').toLowerCase();
     return raw.split('-')[0] || 'en';
   }
-  function tRankedWord(){
-    const map = { en:'Ranked', es:'Clasificado', fr:'Classé', de:'Rangliste', it:'Classifica', pt:'Ranqueado', ru:'Рейтинг', tr:'Sıralama', pl:'Ranking', nl:'Gerangschikt', sv:'Rankad', no:'Rangert', da:'Rangeret', fi:'Sijoitettu', cs:'Hodnocený', hu:'Rangsorolt', ro:'Clasament', uk:'Рейтинг', ja:'ランク', ko:'랭크', zh:'排位' };
+  const I18N = {
+    ranked: { en:'Ranked', es:'Clasificado', fr:'Classé', de:'Rangliste', it:'Classifica', pt:'Ranqueado', ru:'Рейтинг', tr:'Sıralama', pl:'Ranking', nl:'Gerangschikt', sv:'Rankad', no:'Rangert', da:'Rangeret', fi:'Sijoitettu', cs:'Hodnocený', hu:'Rangsorolt', ro:'Clasament', uk:'Рейтинг', ja:'ランク', ko:'랭크', zh:'排位' },
+    overallTitle: { en:'Overall Rankings', es:'Clasificación Global', fr:'Classement Global', de:'Gesamtrangliste', it:'Classifica Generale', pt:'Classificação Geral', ru:'Общий рейтинг', tr:'Genel Sıralama', pl:'Ranking Ogólny', ja:'総合ランキング', ko:'종합 랭킹', zh:'总排行榜' },
+    help: { en:'Help', es:'Ayuda', fr:'Aide', de:'Hilfe', it:'Aiuto', pt:'Ajuda', ru:'Помощь', tr:'Yardım', pl:'Pomoc', ja:'ヘルプ', ko:'도움말', zh:'帮助' },
+    close: { en:'Close', es:'Cerrar', fr:'Fermer', de:'Schließen', it:'Chiudi', pt:'Fechar', ru:'Закрыть', tr:'Kapat', pl:'Zamknij', ja:'閉じる', ko:'닫기', zh:'关闭' },
+    loading: { en:'Loading rankings…', es:'Cargando clasificación…', fr:'Chargement du classement…', de:'Lade Rangliste…', it:'Caricamento classifica…', pt:'Carregando classificação…', ru:'Загрузка рейтинга…', tr:'Sıralama yükleniyor…', ja:'ランキングを読み込み中…', ko:'랭킹 불러오는 중…', zh:'正在加载排行榜…' },
+    placeholderNote: { en:'Showing placeholder names and placeholder scores until real race data is available.', es:'Mostrando nombres y puntajes de ejemplo hasta que haya datos reales.', fr:'Affichage d’exemples tant que les données réelles ne sont pas disponibles.', de:'Platzhalter werden angezeigt, bis echte Renndaten verfügbar sind.', it:'Mostra dati di esempio finché non sono disponibili dati reali.', pt:'Mostrando dados de exemplo até haver dados reais.', ru:'Показаны примерные данные до появления реальных результатов.', tr:'Gerçek veriler gelene kadar örnek veriler gösteriliyor.', ja:'実データが揃うまでサンプルを表示しています。', ko:'실제 데이터가 생길 때까지 예시를 표시합니다.', zh:'在真实数据可用前显示示例数据。' },
+    overallSub: { en:'Ranked score across all tracks. Lower is better. Progress shows tracks played out of 47.', es:'Puntuación clasificada en todas las pistas. Menor es mejor. El progreso muestra pistas jugadas de 47.', fr:'Score classé sur toutes les pistes. Plus bas est meilleur. Progression: pistes jouées sur 47.', de:'Ranglistenwert über alle Strecken. Niedriger ist besser. Fortschritt zeigt gespielte Strecken von 47.', it:'Punteggio classificato su tutte le piste. Più basso è meglio. Progresso: piste giocate su 47.', pt:'Pontuação ranqueada em todas as pistas. Menor é melhor. Progresso: pistas jogadas de 47.' },
+    helpBody: { en:'Need help? Contact us via Google Forms or email.', es:'¿Necesitas ayuda? Contáctanos por Google Forms o correo.', fr:'Besoin d\'aide ? Contactez-nous via Google Forms ou email.', de:'Hilfe benötigt? Kontaktiere uns via Google Forms oder E-Mail.', it:'Serve aiuto? Contattaci tramite Google Forms o email.', pt:'Precisa de ajuda? Fale conosco via Google Forms ou email.' },
+    helpSmall: { en:'Refresh after updates, keep storage enabled, and verify network access if rankings do not update.', es:'Actualiza después de cambios, mantén el almacenamiento habilitado y verifica la red si no actualiza.', fr:'Actualisez après les changements, gardez le stockage activé et vérifiez le réseau si besoin.', de:'Nach Updates neu laden, Speicher aktiviert lassen und Netzwerkzugriff prüfen, falls es nicht aktualisiert.', it:'Aggiorna dopo le modifiche, mantieni lo storage attivo e verifica la rete se non aggiorna.', pt:'Recarregue após atualizações, mantenha o armazenamento ativo e verifique a rede se não atualizar.' }
+  };
+  function tr(key){
     const lang = getUiLanguage();
-    return map[lang] || 'Ranked';
+    const table = I18N[key] || {};
+    return table[lang] || table.en || key;
   }
-  function tRankingsTitle(){
-    const map = { en:'Overall Rankings', es:'Clasificación Global', fr:'Classement Global', de:'Gesamtrangliste', it:'Classifica Generale', pt:'Classificação Geral', ru:'Общий рейтинг', tr:'Genel Sıralama', pl:'Ranking Ogólny', ja:'総合ランキング', ko:'종합 랭킹', zh:'总排行榜' };
-    const lang = getUiLanguage();
-    return map[lang] || 'Overall Rankings';
-  }
+  function tRankedWord(){ return tr('ranked'); }
+  function tRankingsTitle(){ return tr('overallTitle'); }
 
   function isLocalApiCapableHost(){
     const host = String(window.location.hostname || '').toLowerCase();
@@ -369,7 +389,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         if (!auth.currentUser) {
           try {
             await auth.signInAnonymously();
-            log('info','Signed in anonymously for Firestore access');
+            log('info','[FB100] Signed in anonymously for Firestore access');
           } catch (error) {
             log('warn','Anonymous auth unavailable; enable Firebase Anonymous Auth for cloud writes', String(error && (error.message || error)));
           }
@@ -394,7 +414,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       if (!snap.exists) {
         await overallRef.set({ entries: [], updatedAt: Date.now(), seededBy: MARKER }, { merge: true });
       }
-      log('info','Firestore bootstrap ready');
+      log('info','[FB101] Firestore bootstrap ready');
     } catch (error) {
       const msg = String(error && (error.message || error));
       if (/Missing or insufficient permissions/i.test(msg)) {
@@ -411,7 +431,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     style.id = 'polytrack-ext-style';
     style.textContent = `
       #overallLeaderboardPanel{display:none;position:fixed;inset:0;z-index:10001;background:rgba(13,17,37,.96);backdrop-filter: blur(4px);padding:18px;overflow-y:auto;color:var(--text-color,#fff);font-family:ForcedSquare,Arial,sans-serif}
-      .overall-shell{max-width:920px;margin:0 auto;background:linear-gradient(180deg,var(--surface-color,#28346a),var(--surface-secondary-color,#212b58));border:2px solid rgba(255,255,255,.16);box-shadow:0 12px 36px rgba(0,0,0,.45)}
+      .overall-shell{max-width:1060px;margin:0 auto;background:linear-gradient(180deg,var(--surface-color,#28346a),var(--surface-secondary-color,#212b58));border:2px solid rgba(255,255,255,.16);box-shadow:0 12px 36px rgba(0,0,0,.45)}
       .overall-top{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:2px solid rgba(255,255,255,.14)}
       .overall-top h2{margin:0;font-size:40px;font-weight:normal;color:#8ec7ff}
       .overall-sub{margin:0;padding:0 22px 14px;color:rgba(255,255,255,.72);font-size:18px}
@@ -427,9 +447,9 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       #overallHelpClose{cursor:pointer;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:7px 12px}
       .overall-entry{display:flex;align-items:center;padding:12px;background:var(--surface-tertiary-color,#192042);border:1px solid rgba(255,255,255,.08);opacity:0;transform:translateY(8px);animation:overallEntryIn .26s ease forwards}
       .overall-entry.top-3{border-color:rgba(255,217,89,.7);background:linear-gradient(90deg,rgba(255,217,89,.14),rgba(25,32,66,.9))}
-      .overall-rank{width:72px;text-align:center;font-size:28px;color:#82beff}.overall-car{width:16px;height:16px;border-radius:50%;display:inline-block;margin-right:8px;border:1px solid rgba(255,255,255,.25);vertical-align:middle}
-      .overall-name{flex:1;font-size:28px;padding:0 12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .overall-stats{text-align:right;min-width:220px}.overall-score{font-size:30px;color:#6fe1ff}.overall-races{font-size:16px;color:rgba(255,255,255,.6)}
+      .overall-rank{width:88px;text-align:center;font-size:28px;color:#82beff}.overall-car{width:16px;height:16px;border-radius:50%;display:inline-block;margin-right:8px;border:1px solid rgba(255,255,255,.25);vertical-align:middle}
+      .overall-name{flex:1;font-size:24px;padding:0 12px;white-space:normal;overflow-wrap:anywhere}
+      .overall-stats{text-align:right;min-width:250px}.overall-score{font-size:28px;color:#6fe1ff}.overall-races{font-size:15px;color:rgba(255,255,255,.7)}
       .staticFunPill{animation:staticGlowPulse 1.8s ease-in-out infinite}.staticFunHover{transition:transform .16s ease, filter .16s ease, box-shadow .16s ease}
       .staticFunHover:hover{transform:translateY(-2px) scale(1.05);filter:brightness(1.18);box-shadow:0 0 18px rgba(255,255,255,0.20),0 0 30px rgba(0,255,255,0.18)}
       .staticFunText{display:inline-block;white-space:nowrap;perspective:600px;animation:staticFloat 2.2s ease-in-out infinite}
@@ -531,7 +551,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (document.getElementById('overallLeaderboardPanel')) return;
     const panel = document.createElement('div');
     panel.id = 'overallLeaderboardPanel';
-    panel.innerHTML = `<div class="overall-shell" style="position:relative"><div class="overall-top"><h2>${tRankingsTitle()}</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" class="button" type="button">Help</button><button id="closeOverallLeaderboard" class="button" type="button">Close</button></div></div><p class="overall-sub">${tRankedWord()} performance score across all tracks. Lower is better (1.000 is best). Progress shown as tracks played /47.</p><div id="overallLeaderboardList"></div><div id="overallHelpPopup"><div class="overall-help-card"><h3>Rankings Help</h3><p>Need help? Contact us via Google Forms or email <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>.</p><p>Suggestions are welcome through either method.</p><p class="small">Troubleshooting: refresh after updates, ensure storage is enabled, and verify network access if rankings do not update.</p><div class="overall-help-actions"><button id="overallHelpClose" type="button">Close</button></div></div></div></div>`;
+    panel.innerHTML = `<div class="overall-shell" style="position:relative"><div class="overall-top"><h2>${tRankingsTitle()}</h2><div style="display:flex;gap:8px"><button id="overallHelpBtn" class="button" type="button">${tr('help')}</button><button id="closeOverallLeaderboard" class="button" type="button">${tr('close')}</button></div></div><p class="overall-sub">${tr('overallSub')}</p><div id="overallLeaderboardList"></div><div id="overallHelpPopup"><div class="overall-help-card"><h3>${tRankingsTitle()} · ${tr('help')}</h3><p>${tr('helpBody')} <a href="mailto:StaticQuasar931Games@gmail.com" style="color:#b7e2ff">StaticQuasar931Games@gmail.com</a>.</p><p class="small">${tr('helpSmall')}</p><div class="overall-help-actions"><button id="overallHelpClose" type="button">${tr('close')}</button></div></div></div></div>`;
     document.body.appendChild(panel);
     panel.addEventListener('click', (event)=>{ if (event.target === panel) panel.style.display='none'; });
     panel.querySelector('#closeOverallLeaderboard').addEventListener('click', ()=>{ panel.style.display='none'; });
@@ -561,7 +581,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       name: String(entry.name || 'Unknown'),
       score: Math.max(1.000001, Number(entry.score ?? entry.averageRank ?? 1.000001) || 1.000001),
       raceCount: Number(entry.raceCount || 0),
-      totalTracks: Number(entry.totalTracks || TOTAL_TRACKS) || TOTAL_TRACKS
+      totalTracks: Number(entry.totalTracks || TOTAL_TRACKS) || TOTAL_TRACKS,
+      carColors: String(entry.carColors || 'ffffff8ec7ff28346a212b58').slice(0,24)
     })).sort((a,b)=>a.rank-b.rank).slice(0, 50);
   }
 
@@ -747,10 +768,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         { rank:4, name:'Test Chassis', carColors:'70a1ff', score:1.040, raceCount:9, totalTracks:47 },
         { rank:5, name:'Ghost Entry', carColors:'eccc68', score:1.012, raceCount:8, totalTracks:47 }
       ];
-      listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">Showing placeholder names and placeholder scores until real race data is available.</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name"><span class="overall-car" style="background:#${String(entry.carColors||'8ec7ff').replace(/[^0-9a-fA-F]/g,'').slice(0,6)||'8ec7ff'}"></span>${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
+      listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">${tr('placeholderNote')}</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name"><span class="overall-car-model"><span class="overall-car" style="background:linear-gradient(135deg,#${String(entry.carColors||'8ec7ff').replace(/[^0-9a-fA-F]/g,'').slice(0,6)||'8ec7ff'} 0%,#${String(entry.carColors||'28346a').replace(/[^0-9a-fA-F]/g,'').slice(6,12)||'28346a'} 100%)"></span></span>${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
       return;
     }
-    listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name"><span class="overall-car" style="background:#${String(entry.carColors||'8ec7ff').replace(/[^0-9a-fA-F]/g,'').slice(0,6)||'8ec7ff'}"></span>${entry.name}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
+    listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name"><span class="overall-car-model"><span class="overall-car" style="background:linear-gradient(135deg,#${String(entry.carColors||'8ec7ff').replace(/[^0-9a-fA-F]/g,'').slice(0,6)||'8ec7ff'} 0%,#${String(entry.carColors||'28346a').replace(/[^0-9a-fA-F]/g,'').slice(6,12)||'28346a'} 100%)"></span></span>${entry.name}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
   }
 
   async function openPanel(){
@@ -758,7 +779,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const listEl = document.getElementById('overallLeaderboardList');
     if (!panel || !listEl) return;
     panel.style.display='block';
-    listEl.innerHTML = '<div class="overall-entry"><span class="overall-name">Loading rankings…</span></div>';
+    listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">${tr('loading')}</span></div>`;
     renderEntries(await fetchOverallEntries());
   }
 
@@ -775,7 +796,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   function makeUserPayload(){
     const stickyName = sanitizeDisplayName(localStorage.getItem(LAST_ACTIVE_NAME_KEY) || 'Guest');
-    const stickyColors = String(localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '0,0,0,0,0,0').slice(0,64) || '0,0,0,0,0,0';
+    const stickyColors = getOrCreateInitialCarColors();
     const stickyAccountId = String(localStorage.getItem('polytrack-active-account-id') || guestAccountId || '').slice(0,128);
     const accountId = resolveProfileAccountId({ name: stickyName, nickname: stickyName, carColors: stickyColors, accountId: stickyAccountId }, stickyAccountId);
     return {
@@ -861,8 +882,28 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         } catch {}
         try {
           const d = await db();
-          await d.collection('profiles_public').doc(accountId).set({ accountId, name: safeName, carColors: safeColors, updatedAt: Date.now() }, { merge: true });
-        } catch {}
+          const nowTs = Date.now();
+          log('info','[FB202] profiles_public.set start',{accountId});
+          await d.collection('profiles_public').doc(accountId).set({ accountId, name: safeName, carColors: safeColors, updatedAt: nowTs }, { merge: true });
+          log('info','[FB202] profiles_public.set ok',{accountId});
+          try {
+            const rs = await d.collection('race_results').where('accountId','==',accountId).orderBy('createdAt','desc').limit(3000).get();
+            const rows = rs.docs.map((x)=>x.data()||{});
+            const trackIds = Array.from(new Set(rows.map((r)=>String(r.trackId||'')).filter(Boolean)));
+            for (const tid of trackIds) {
+              const trackSnap = await d.collection('race_results').where('trackId','==',tid).orderBy('createdAt','desc').limit(3000).get();
+              const trackRows = trackSnap.docs.map((x)=>x.data()||{});
+              const top = computeTrackTopEntries(trackRows, tid, 100);
+              if (top.length) await d.collection('leaderboards_track').doc(tid).set({ trackId: tid, entries: top, updatedAt: nowTs }, { merge: true });
+            }
+            const allSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(5000).get();
+            const overallEntries = normalizeEntries(computeOverallFromRaceRows(allSnap.docs.map((x)=>x.data()||{})));
+            await d.collection('leaderboards_overall').doc('main').set({ entries: overallEntries, updatedAt: nowTs, seededBy: MARKER }, { merge: true });
+            log('info','[FB206] profile rename propagated',{accountId,trackCount:trackIds.length});
+          } catch (propErr) {
+            log('warn','[FB406] profile propagation skipped', String(propErr && (propErr.message || propErr)));
+          }
+        } catch (err) { log('warn','[FB402] profiles_public.set failed', String(err && (err.message || err))); }
       }
       return makeUserPayload();
     }
@@ -898,7 +939,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
             carColors: String(row.carColors || 'ffffff8ec7ff28346a212b58').slice(0,64)
           };
         });
-      } catch {
+      } catch (error) {
+        log('warn','[FB407] recordings lookup failed', String(error && (error.message || error)));
         return ids.map(()=>null);
       }
     }
@@ -976,6 +1018,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const d = await db();
             lastMirrorSig = mirrorSig;
       lastMirrorAt = Date.now();
+      log('info','[FB201] race_results.add start',{trackId,accountId,uploadId});
       await d.collection('race_results').add({
         accountId,
         trackId,
@@ -991,6 +1034,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         createdAt,
         source: String(url || '').slice(0,500)
       });
+      log('info','[FB202] profiles_public.set start',{accountId});
       await d.collection('profiles_public').doc(accountId).set({
         accountId,
         name,
@@ -1005,15 +1049,18 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const trackSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(3000).get();
       const trackRows = trackSnap.docs.map((x)=>x.data() || {});
       const topEntries = computeTrackTopEntries(trackRows, trackId, 100);
+      log('info','[FB203] leaderboards_track.set start',{trackId,entries:topEntries.length});
       await d.collection('leaderboards_track').doc(String(trackId)).set({ trackId: String(trackId), entries: topEntries, updatedAt: createdAt }, { merge: true });
       const allSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(2500).get();
       const allRows = allSnap.docs.map((x)=>x.data() || {});
       const overallEntries = normalizeEntries(computeOverallFromRaceRows(allRows));
       if (overallEntries.length) {
+        log('info','[FB204] leaderboards_overall.set start',{entries:overallEntries.length});
         await d.collection('leaderboards_overall').doc('main').set({ entries: overallEntries, updatedAt: createdAt, seededBy: MARKER }, { merge: true });
       }
+      log('info','[FB205] system.last_race_ingest.set start',{trackId,accountId,timeMs});
       await d.collection('system').doc('last_race_ingest').set({ accountId, trackId, timeMs, updatedAt: createdAt }, { merge: true });
-      log('info','Race mirrored to Firestore',{accountId,trackId,timeMs,name});
+      log('info','[FB299] Race mirrored to Firestore',{accountId,trackId,timeMs,name,uploadId});
       return { accountId, trackId, uploadId, timeMs, frames, name, carColors };
 
     } catch (error) {
@@ -1211,4 +1258,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v25 */
+/* polytrack-extension-inline-v26 */
