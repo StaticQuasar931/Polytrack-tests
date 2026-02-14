@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v27";
+  const MARKER = "polytrack-extension-inline-v28";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -406,7 +406,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       }
       const fire = app.firestore();
       try {
-        fire.settings({ experimentalAutoDetectLongPolling: true, useFetchStreams: false });
+        fire.settings({ experimentalAutoDetectLongPolling: true, useFetchStreams: false, merge: true });
       } catch {}
       return fire;
     })();
@@ -874,8 +874,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
 
   async function mockPayload(urlObj, method, body){
+    log('info','[NET100] mock request',{path:urlObj.pathname,method:String(method||'GET').toUpperCase()});
     if (urlObj.pathname === '/user') {
       if (String(method).toUpperCase() === 'POST') {
+        log('info','[NET201] /user POST intercepted');
         const payload = parsePayload(body) || {};
         const accountId = resolveProfileAccountId(payload, String(payload.userTokenHash || payload.userId || payload.accountId || guestAccountId || '').slice(0,128));
         const safeName = await enforceSafeDisplayName(payload.name || payload.nickname || localStorage.getItem(LAST_ACTIVE_NAME_KEY) || 'Guest', accountId);
@@ -931,6 +933,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const hinted = parsePayload(body) || {};
       let mirrorMeta = null;
       if (String(method).toUpperCase() === 'POST') {
+        log('info','[NET201] /user POST intercepted');
         try { mirrorMeta = await mirrorRaceResult(urlObj.toString(), body); } catch {}
       }
       const accountId = resolveProfileAccountId(hinted, String(urlObj.searchParams.get('userTokenHash') || hinted.userTokenHash || hinted.userId || hinted.accountId || mirrorMeta?.accountId || localStorage.getItem('polytrack-active-account-id') || guestAccountId));
@@ -1122,6 +1125,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const rawUrl = typeof url === 'string' ? url : String(url || '');
       const urlObj = parseTarget(rawUrl);
       if (shouldMock(urlObj)) {
+        log('info','[NET101] fetch mock intercept',{url:rawUrl,method});
         const payload = await mockPayload(urlObj, method, options.body);
         return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
@@ -1135,7 +1139,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       this.__extUrl = String(url || '');
       this.__extUrlObj = parseTarget(this.__extUrl);
       this.__extMock = shouldMock(this.__extUrlObj);
-      this.__extMockDynamic = this.__extMock && (this.__extUrlObj?.pathname === '/leaderboard' || this.__extUrlObj?.pathname === '/recordings');
+      this.__extMockDynamic = this.__extMock && (this.__extUrlObj?.pathname === '/user' || this.__extUrlObj?.pathname === '/leaderboard' || this.__extUrlObj?.pathname === '/recordings');
       if (this.__extMock && !this.__extMockDynamic) {
         const payload = JSON.stringify(makeUserPayload());
         this.__extBlobUrl = URL.createObjectURL(new Blob([payload], { type: 'application/json' }));
@@ -1145,6 +1149,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     };
     XMLHttpRequest.prototype.send = function(body){
       if (this.__extMockDynamic) {
+        log('info','[NET102] xhr dynamic mock intercept',{url:this.__extUrl,method:this.__extMethod});
         mockPayload(this.__extUrlObj, this.__extMethod, body).then((payload)=>{
           this.__extBlobUrl = URL.createObjectURL(new Blob([JSON.stringify(payload)], { type: 'application/json' }));
           originalOpen.call(this, 'GET', this.__extBlobUrl, true);
@@ -1179,13 +1184,16 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     container.appendChild(button);
     if (!rankingsSpawnedOnce) {
       requestAnimationFrame(()=>{
-        button.classList.remove('button-spawn');
-        void button.offsetWidth;
-        button.classList.add('button-spawn');
-        button.style.animation = '';
+        const nativeSpawning = !!container.querySelector('button.button-image.button-spawn');
+        if (nativeSpawning) {
+          button.classList.remove('button-spawn');
+          void button.offsetWidth;
+          button.classList.add('button-spawn');
+          button.style.animation = '';
+          setTimeout(()=>{ try { button.classList.remove('button-spawn'); } catch {} }, 1300);
+        }
         rankingsSpawnedOnce = true;
         window.__polytrackRankingsAnimated = true;
-        setTimeout(()=>{ try { button.classList.remove('button-spawn'); } catch {} }, 1300);
       });
     } else {
       button.classList.remove('button-spawn');
@@ -1282,4 +1290,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v27 */
+/* polytrack-extension-inline-v28 */
