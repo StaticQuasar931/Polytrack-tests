@@ -57,6 +57,7 @@
     "preelectron": "cross-env TARGET=electron API_URL=http://localhost:8000/ webpack --mode=development",
     "electron": "electron ./dist",
     "update-capacitor-icons": "npx @capacitor/assets generate --iconBackgroundColor #28346a --iconBackgroundColorDark #28346a --splashBackgroundColor #28346a --splashBackgroundColorDark #28346a --android --assetPath \"./android/resources\"",
-    "android": "cross-env TARGET=capacitor API_URL=http://localhost:8000/ webpack --mode=development && npx cap sync && npx cap run android"
+    "android": "cross-env TARGET=capacitor API_URL=http://localhost:8000/ webpack --mode=development && npx cap sync && npx cap run android",
+    "serve": "node server.js"
   }
 }
