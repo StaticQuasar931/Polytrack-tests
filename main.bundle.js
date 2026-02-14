@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v26";
+  const MARKER = "polytrack-extension-inline-v27";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -154,7 +154,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     placeholderNote: { en:'Showing placeholder names and placeholder scores until real race data is available.', es:'Mostrando nombres y puntajes de ejemplo hasta que haya datos reales.', fr:'Affichage d’exemples tant que les données réelles ne sont pas disponibles.', de:'Platzhalter werden angezeigt, bis echte Renndaten verfügbar sind.', it:'Mostra dati di esempio finché non sono disponibili dati reali.', pt:'Mostrando dados de exemplo até haver dados reais.', ru:'Показаны примерные данные до появления реальных результатов.', tr:'Gerçek veriler gelene kadar örnek veriler gösteriliyor.', ja:'実データが揃うまでサンプルを表示しています。', ko:'실제 데이터가 생길 때까지 예시를 표시합니다.', zh:'在真实数据可用前显示示例数据。' },
     overallSub: { en:'Ranked score across all tracks. Lower is better. Progress shows tracks played out of 47.', es:'Puntuación clasificada en todas las pistas. Menor es mejor. El progreso muestra pistas jugadas de 47.', fr:'Score classé sur toutes les pistes. Plus bas est meilleur. Progression: pistes jouées sur 47.', de:'Ranglistenwert über alle Strecken. Niedriger ist besser. Fortschritt zeigt gespielte Strecken von 47.', it:'Punteggio classificato su tutte le piste. Più basso è meglio. Progresso: piste giocate su 47.', pt:'Pontuação ranqueada em todas as pistas. Menor é melhor. Progresso: pistas jogadas de 47.' },
     helpBody: { en:'Need help? Contact us via Google Forms or email.', es:'¿Necesitas ayuda? Contáctanos por Google Forms o correo.', fr:'Besoin d\'aide ? Contactez-nous via Google Forms ou email.', de:'Hilfe benötigt? Kontaktiere uns via Google Forms oder E-Mail.', it:'Serve aiuto? Contattaci tramite Google Forms o email.', pt:'Precisa de ajuda? Fale conosco via Google Forms ou email.' },
-    helpSmall: { en:'Refresh after updates, keep storage enabled, and verify network access if rankings do not update.', es:'Actualiza después de cambios, mantén el almacenamiento habilitado y verifica la red si no actualiza.', fr:'Actualisez après les changements, gardez le stockage activé et vérifiez le réseau si besoin.', de:'Nach Updates neu laden, Speicher aktiviert lassen und Netzwerkzugriff prüfen, falls es nicht aktualisiert.', it:'Aggiorna dopo le modifiche, mantieni lo storage attivo e verifica la rete se non aggiorna.', pt:'Recarregue após atualizações, mantenha o armazenamento ativo e verifique a rede se não atualizar.' }
+    helpSmall: { en:'Refresh after updates, keep storage enabled, and verify network access if rankings do not update.', es:'Actualiza después de cambios, mantén el almacenamiento habilitado y verifica la red si no actualiza.', fr:'Actualisez après les changements, gardez le stockage activé et vérifiez le réseau si besoin.', de:'Nach Updates neu laden, Speicher aktiviert lassen und Netzwerkzugriff prüfen, falls es nicht aktualisiert.', it:'Aggiorna dopo le modifiche, mantieni lo storage attivo e verifica la rete se non aggiorna.', pt:'Recarregue após atualizações, mantenha o armazenamento ativo e verifique a rede se não atualizar.' },
+    unofficialLine1: { en:'This is an unofficial community recreation made by Static.', es:'Esta es una recreación comunitaria no oficial hecha por Static.', fr:'Ceci est une recréation communautaire non officielle réalisée par Static.', de:'Dies ist eine inoffizielle Community-Neuauflage von Static.' },
+    unofficialLine2: { en:'Play the official version at', es:'Juega la versión oficial en', fr:'Jouez à la version officielle sur', de:'Spiele die offizielle Version auf' },
+    moreGames: { en:'More Unblocked Games by Static', es:'Más juegos desbloqueados de Static', fr:'Plus de jeux débloqués par Static', de:'Mehr unblockierte Spiele von Static' }
   };
   function tr(key){
     const lang = getUiLanguage();
@@ -163,6 +166,12 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
   function tRankedWord(){ return tr('ranked'); }
   function tRankingsTitle(){ return tr('overallTitle'); }
+  function carModelPreview(colors){
+    const cleaned = String(colors || '').replace(/[^0-9a-fA-F]/g,'').slice(0,24);
+    const c1 = cleaned.slice(0,6) || '8ec7ff';
+    const c2 = cleaned.slice(6,12) || '28346a';
+    return `<span class="overall-car-model" style="background-image:url('images/car_thumbnail_placeholder.png');background-size:cover;background-position:center"><span class="overall-car" style="background:linear-gradient(135deg,#${c1} 0%,#${c2} 100%)"></span></span>`;
+  }
 
   function isLocalApiCapableHost(){
     const host = String(window.location.hostname || '').toLowerCase();
@@ -395,7 +404,11 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           }
         }
       }
-      return app.firestore();
+      const fire = app.firestore();
+      try {
+        fire.settings({ experimentalAutoDetectLongPolling: true, useFetchStreams: false });
+      } catch {}
+      return fire;
     })();
     return firestorePromise;
   }
@@ -431,7 +444,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     style.id = 'polytrack-ext-style';
     style.textContent = `
       #overallLeaderboardPanel{display:none;position:fixed;inset:0;z-index:10001;background:rgba(13,17,37,.96);backdrop-filter: blur(4px);padding:18px;overflow-y:auto;color:var(--text-color,#fff);font-family:ForcedSquare,Arial,sans-serif}
-      .overall-shell{max-width:1060px;margin:0 auto;background:linear-gradient(180deg,var(--surface-color,#28346a),var(--surface-secondary-color,#212b58));border:2px solid rgba(255,255,255,.16);box-shadow:0 12px 36px rgba(0,0,0,.45)}
+      .overall-shell{max-width:1060px;max-height:min(88vh,980px);overflow-y:auto;margin:0 auto;background:linear-gradient(180deg,var(--surface-color,#28346a),var(--surface-secondary-color,#212b58));border:2px solid rgba(255,255,255,.16);box-shadow:0 12px 36px rgba(0,0,0,.45)}
       .overall-top{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:2px solid rgba(255,255,255,.14)}
       .overall-top h2{margin:0;font-size:40px;font-weight:normal;color:#8ec7ff}
       .overall-sub{margin:0;padding:0 22px 14px;color:rgba(255,255,255,.72);font-size:18px}
@@ -447,7 +460,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       #overallHelpClose{cursor:pointer;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:7px 12px}
       .overall-entry{display:flex;align-items:center;padding:12px;background:var(--surface-tertiary-color,#192042);border:1px solid rgba(255,255,255,.08);opacity:0;transform:translateY(8px);animation:overallEntryIn .26s ease forwards}
       .overall-entry.top-3{border-color:rgba(255,217,89,.7);background:linear-gradient(90deg,rgba(255,217,89,.14),rgba(25,32,66,.9))}
-      .overall-rank{width:88px;text-align:center;font-size:28px;color:#82beff}.overall-car{width:16px;height:16px;border-radius:50%;display:inline-block;margin-right:8px;border:1px solid rgba(255,255,255,.25);vertical-align:middle}
+      .overall-rank{width:88px;text-align:center;font-size:28px;color:#82beff}.overall-car-model{width:64px;height:28px;border-radius:8px;display:inline-flex;align-items:flex-end;justify-content:center;margin-right:9px;border:1px solid rgba(255,255,255,.25);vertical-align:middle;box-shadow:inset 0 0 14px rgba(0,0,0,.28)}.overall-car{width:32px;height:8px;border-radius:999px;display:inline-block;margin-bottom:4px;border:1px solid rgba(255,255,255,.45);vertical-align:middle}
       .overall-name{flex:1;font-size:24px;padding:0 12px;white-space:normal;overflow-wrap:anywhere}
       .overall-stats{text-align:right;min-width:250px}.overall-score{font-size:28px;color:#6fe1ff}.overall-races{font-size:15px;color:rgba(255,255,255,.7)}
       .staticFunPill{animation:staticGlowPulse 1.8s ease-in-out infinite}.staticFunHover{transition:transform .16s ease, filter .16s ease, box-shadow .16s ease}
@@ -472,16 +485,18 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function setUnofficialMessage(){
     const warning = document.querySelector('.menu .warning-message');
     if (!warning) return;
+    const lang = getUiLanguage();
     const existingLink = warning.querySelector('a[href="https://www.kodub.com/games/polytrack"]');
     const existingText = warning.textContent || '';
-    if (warning.dataset.k === WARN_FP && existingLink && existingText.includes('unofficial community recreation')) return;
+    if (warning.dataset.k === WARN_FP && warning.dataset.lang === lang && existingLink && existingText) return;
     warning.dataset.k = WARN_FP;
+    warning.dataset.lang = lang;
     warning.className = 'warning-message official-link';
     warning.innerHTML = '';
     const line1 = document.createElement('div');
-    line1.textContent = 'This is an unofficial community recreation made by Static.';
+    line1.textContent = tr('unofficialLine1');
     const line2 = document.createElement('div');
-    line2.append('Play the official version at ');
+    line2.append(`${tr('unofficialLine2')} `);
     const link = document.createElement('a');
     link.href = 'https://www.kodub.com/games/polytrack';
     link.target = '_blank';
@@ -495,8 +510,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   function ensurePersistentInfoBranding(){
     const info = document.querySelector('.menu .info');
     if (!info) return;
-    if (info.dataset.fp === BRAND_FP && info.querySelector('.staticFunPill')) return;
+    const lang = getUiLanguage();
+    if (info.dataset.fp === BRAND_FP && info.dataset.lang === lang && info.querySelector('.staticFunPill')) return;
     info.dataset.fp = BRAND_FP;
+    info.dataset.lang = lang;
     info.innerHTML = '';
     const promo = document.createElement('a');
     promo.href = 'https://sites.google.com/view/staticquasar931/gm3z';
@@ -505,7 +522,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     promo.setAttribute('aria-label','More Unblocked Games by Static');
     promo.className = 'staticFunHover staticFunPill';
     promo.style.cssText = 'display:inline-block;cursor:pointer;pointer-events:auto;user-select:text;font-family:Arial,sans-serif;font-size:22px;font-weight:900;letter-spacing:1px;text-decoration:none;padding:7px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.18);text-shadow:0 0 10px rgba(255,255,255,.2);position:relative;z-index:5;filter:none;backdrop-filter:none;';
-    const label='More Unblocked Games by Static';
+    const label=tr('moreGames');
     const textWrap=document.createElement('span');
     textWrap.className='staticFunText';
     textWrap.style.pointerEvents='none';
@@ -768,10 +785,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         { rank:4, name:'Test Chassis', carColors:'70a1ff', score:1.040, raceCount:9, totalTracks:47 },
         { rank:5, name:'Ghost Entry', carColors:'eccc68', score:1.012, raceCount:8, totalTracks:47 }
       ];
-      listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">${tr('placeholderNote')}</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name"><span class="overall-car-model"><span class="overall-car" style="background:linear-gradient(135deg,#${String(entry.carColors||'8ec7ff').replace(/[^0-9a-fA-F]/g,'').slice(0,6)||'8ec7ff'} 0%,#${String(entry.carColors||'28346a').replace(/[^0-9a-fA-F]/g,'').slice(6,12)||'28346a'} 100%)"></span></span>${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
+      listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">${tr('placeholderNote')}</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${carModelPreview(entry.carColors)}${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
       return;
     }
-    listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name"><span class="overall-car-model"><span class="overall-car" style="background:linear-gradient(135deg,#${String(entry.carColors||'8ec7ff').replace(/[^0-9a-fA-F]/g,'').slice(0,6)||'8ec7ff'} 0%,#${String(entry.carColors||'28346a').replace(/[^0-9a-fA-F]/g,'').slice(6,12)||'28346a'} 100%)"></span></span>${entry.name}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
+    listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${carModelPreview(entry.carColors)}${entry.name}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
   }
 
   async function openPanel(){
@@ -852,6 +869,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const isLegacyPath = path === '/user' || path === '/leaderboard' || path === '/recordings';
     if (!isLegacyPath) return false;
     const host = String(urlObj.host || '').toLowerCase();
+    if (host === window.location.host.toLowerCase()) return true;
     return host === 'vps.kodub.com' || host.endsWith('.kodub.com') || host === 'kodub.com';
   }
 
@@ -1149,7 +1167,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     if (!container) return;
     let button = document.getElementById('injectedRankingsBtn') || rankingsButtonRef;
     if (button && button.parentElement !== container) container.appendChild(button);
-    if (button) return;
+    if (button) {
+      button.innerHTML = `<img src="images/trophy.svg"><p>${tRankedWord()}</p>`;
+      return;
+    }
     button = document.createElement('button');
     button.id = 'injectedRankingsBtn';
     button.className = 'button button-image';
@@ -1158,7 +1179,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     container.appendChild(button);
     if (!rankingsSpawnedOnce) {
       requestAnimationFrame(()=>{
+        button.classList.remove('button-spawn');
+        void button.offsetWidth;
         button.classList.add('button-spawn');
+        button.style.animation = '';
         rankingsSpawnedOnce = true;
         window.__polytrackRankingsAnimated = true;
         setTimeout(()=>{ try { button.classList.remove('button-spawn'); } catch {} }, 1300);
@@ -1258,4 +1282,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v26 */
+/* polytrack-extension-inline-v27 */
