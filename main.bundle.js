@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v31";
+  const MARKER = "polytrack-extension-inline-v32";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -115,20 +115,22 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   function resolveProfileAccountId(payload, suggestedId){
     const suggested = String(suggestedId || '').slice(0, 128);
-    const strongSuggested = suggested && !/^guest-/.test(suggested);
-    if (strongSuggested) return suggested;
-    const nameKey = normalizedNameKey(payload?.name || payload?.nickname || 'guest');
     const signature = makeProfileSignature(payload);
     const map = readProfileMap();
-    let resolved = '';
-    if (signature && map.bySignature[signature]) resolved = map.bySignature[signature];
-    else if (nameKey && map.byName[nameKey]) resolved = map.byName[nameKey];
-    else if (Object.keys(map.byName).length === 0 && suggested) resolved = suggested;
-    else resolved = makeGeneratedProfileId();
-    if (nameKey) map.byName[nameKey] = resolved;
-    if (signature) map.bySignature[signature] = resolved;
-    writeProfileMap(map);
-    return resolved;
+    if (suggested) {
+      if (signature) {
+        map.bySignature[signature] = suggested;
+        writeProfileMap(map);
+      }
+      return suggested;
+    }
+    if (signature && map.bySignature[signature]) return map.bySignature[signature];
+    const generated = makeGeneratedProfileId();
+    if (signature) {
+      map.bySignature[signature] = generated;
+      writeProfileMap(map);
+    }
+    return generated;
   }
 
   const BRAND_FP = `${q0}${q1}${q2}${q3}`;
@@ -218,7 +220,11 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     return Math.abs(h >>> 0) % 2147483000 + 1;
   }
   function buildRecordingId(row, fallbackRank){
-    return safeRecordingId(row?.uploadId || row?.id) || hashToSafeInt(`${row?.accountId||''}|${row?.trackId||''}|${row?.createdAt||fallbackRank||0}|${row?.replayHash||''}`);
+    const explicitId = safeRecordingId(row?.uploadId || row?.id);
+    if (explicitId) return explicitId;
+    const hasReplay = !!String(row?.replay || row?.recording || row?.replayData || row?.replayHash || '').trim();
+    if (!hasReplay) return null;
+    return hashToSafeInt(`${row?.accountId||''}|${row?.trackId||''}|${row?.createdAt||fallbackRank||0}|${row?.replayHash||row?.replay||''}`);
   }
   function writeRecordingStore(id, payload){
     if (!id || !payload) return;
@@ -663,7 +669,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
 
   async function hydrateDisplayNames(entries){
-    const out = enrichLegacyLeaderboardEntries(entries);
+    const out = enrichLegacyLeaderboardEntries(entries).map((entry)=>({ ...entry, id: safeRecordingId(entry.id) || safeRecordingId(entry.uploadId) || null }));
     try {
       const d = await db();
       await Promise.all(out.slice(0, 100).map(async (entry)=>{
@@ -899,7 +905,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     };
     if (method === 'POST') base.uploadId = safeRecordingId(forcedUploadId) || nextUploadId();
     const sourceUser = normalizedEntries.find((e)=>String(e.accountId||e.userId||'')===String(forcedUserEntryId||'')) || normalizedEntries[pos-1] || normalizedEntries[0] || null;
-    if (sourceUser) base.userEntry = { id: safeRecordingId(sourceUser.id) || safeRecordingId(forcedUploadId) || nextUploadId(), position: pos, frames: sourceUser.frames || sourceUser.time?.numberOfFrames || 1 };
+    if (sourceUser) {
+      const sourceId = safeRecordingId(sourceUser.id) || safeRecordingId(sourceUser.uploadId) || (method === 'POST' ? (safeRecordingId(forcedUploadId) || nextUploadId()) : null);
+      base.userEntry = { id: sourceId, position: pos, frames: sourceUser.frames || sourceUser.time?.numberOfFrames || 1 };
+    }
     return base;
   }
 
@@ -983,8 +992,9 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const entries = await getTrackEntries(trackId, amount).catch(()=>[]);
       const mine = entries.find((e)=>String(e.accountId||'')===String(accountId||''));
       const prevMine = preEntries.find((e)=>String(e.accountId||'')===String(accountId||''));
-      const myPos = safePositiveInt(mine?.rank || mine?.position || 1, 1);
-      const prevPos = safePositiveInt(prevMine?.rank || prevMine?.position || myPos, myPos);
+      const fallbackPos = Math.max(1, entries.length + 1);
+      const myPos = mine ? safePositiveInt(mine?.rank || mine?.position || fallbackPos, fallbackPos) : fallbackPos;
+      const prevPos = prevMine ? safePositiveInt(prevMine?.rank || prevMine?.position || myPos, myPos) : myPos;
       return makeLeaderboardPayload(method, entries, myPos, prevPos, mirrorMeta?.uploadId || null, accountId);
     }
 
@@ -1248,23 +1258,39 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     button.style.animationDelay = (0.3 + existing.length * 0.1).toFixed(1) + 's';
     container.appendChild(button);
     if (!rankingsSpawnedOnce) {
-      const spawnWithSync = (attempt=0)=>{
-        const playBtn = Array.from(container.querySelectorAll('button')).find((b)=>/play/i.test((b.textContent||'').trim()));
-        const playAnimating = !!(playBtn && ((playBtn.classList && playBtn.classList.contains('button-spawn')) || getComputedStyle(playBtn).animationName === 'buttonSpawn'));
-        if (!playAnimating && attempt < 20) { setTimeout(()=>spawnWithSync(attempt+1), 80); return; }
+      const runSpawn = ()=>{
+        if (rankingsSpawnedOnce || !button.isConnected) return;
         requestAnimationFrame(()=>{
-          button.classList.remove('button-spawn');
-          void button.offsetWidth;
-          button.classList.add('button-spawn');
-          button.style.animationName = 'buttonSpawn';
-          button.style.animationDuration = '0.36s';
-          button.style.animationFillMode = 'backwards';
-          setTimeout(()=>{ try { button.classList.remove('button-spawn'); button.style.animationName=''; button.style.animationDuration=''; button.style.animationFillMode=''; } catch {} }, 1300);
-          rankingsSpawnedOnce = true;
-          window.__polytrackRankingsAnimated = true;
+          try {
+            button.classList.remove('button-spawn');
+            void button.offsetWidth;
+            button.classList.add('button-spawn');
+            button.style.animationName = 'buttonSpawn';
+            button.style.animationDuration = '0.36s';
+            button.style.animationFillMode = 'backwards';
+            setTimeout(()=>{ try { button.classList.remove('button-spawn'); button.style.animationName=''; button.style.animationDuration=''; button.style.animationFillMode=''; } catch {} }, 1300);
+            rankingsSpawnedOnce = true;
+            window.__polytrackRankingsAnimated = true;
+          } catch {}
         });
       };
-      spawnWithSync();
+      const nativeButtons = Array.from(container.querySelectorAll('button.button-image')).filter((el)=>el.id !== 'injectedRankingsBtn');
+      const animatingNow = nativeButtons.some((el)=>el.classList.contains('button-spawn') || (getComputedStyle(el).animationName || '').includes('buttonSpawn'));
+      if (animatingNow) {
+        runSpawn();
+      } else {
+        let settled = false;
+        const observer = new MutationObserver(()=>{
+          if (settled) return;
+          const seen = nativeButtons.some((el)=>el.classList.contains('button-spawn'));
+          if (!seen) return;
+          settled = true;
+          observer.disconnect();
+          runSpawn();
+        });
+        nativeButtons.forEach((el)=>observer.observe(el, { attributes: true, attributeFilter: ['class'] }));
+        setTimeout(()=>{ if (!settled) { settled = true; observer.disconnect(); runSpawn(); } }, 2200);
+      }
     } else {
       button.classList.remove('button-spawn');
       button.style.animation = 'none';
@@ -1362,4 +1388,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v31 */
+/* polytrack-extension-inline-v32 */
