@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v30";
+  const MARKER = "polytrack-extension-inline-v31";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -166,13 +166,32 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
   function tRankedWord(){ return tr('ranked'); }
   function tRankingsTitle(){ return tr('overallTitle'); }
-  function carModelPreview(colors){
+  const carOverlayCache = new Map();
+  function makeCarOverlayPng(colors){
     const cleaned = String(colors || '').replace(/[^0-9a-fA-F]/g,'').slice(0,24);
-    const c1 = cleaned.slice(0,6) || '8ec7ff';
-    const c2 = cleaned.slice(6,12) || '28346a';
-    const overlaySvg = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 110'><rect x='20' y='42' rx='12' ry='12' width='160' height='42' fill='#${c1}'/><rect x='24' y='54' rx='9' ry='9' width='152' height='10' fill='#${c2}' opacity='0.95'/><rect x='52' y='30' rx='8' ry='8' width='96' height='20' fill='#${c2}' opacity='0.88'/></svg>`);
-    return `<span class="overall-car-model image-container"><img src="images/car_thumbnail_placeholder.png" alt="car"/><img src="data:image/svg+xml;utf8,${overlaySvg}" class="show" alt="car colors"/></span>`;
+    const c1 = `#${cleaned.slice(0,6) || '8ec7ff'}`;
+    const c2 = `#${cleaned.slice(6,12) || '28346a'}`;
+    if (carOverlayCache.has(cleaned)) return carOverlayCache.get(cleaned);
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 200; canvas.height = 110;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return '';
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = c1; ctx.beginPath(); ctx.roundRect(20, 42, 160, 42, 12); ctx.fill();
+      ctx.globalAlpha = 0.95; ctx.fillStyle = c2; ctx.beginPath(); ctx.roundRect(24, 54, 152, 10, 9); ctx.fill();
+      ctx.globalAlpha = 0.88; ctx.fillStyle = c2; ctx.beginPath(); ctx.roundRect(52, 30, 96, 20, 8); ctx.fill();
+      ctx.globalAlpha = 1;
+      const url = canvas.toDataURL('image/png');
+      carOverlayCache.set(cleaned, url);
+      return url;
+    } catch { return ''; }
   }
+  function carModelPreview(colors){
+    const overlay = makeCarOverlayPng(colors);
+    return `<span class="overall-car-model image-container"><img src="images/car_thumbnail_placeholder.png" alt="car"/>${overlay?`<img src="${overlay}" class="show" alt="car colors"/>`:''}</span>`;
+  }
+
 
   function isLocalApiCapableHost(){
     const host = String(window.location.hostname || '').toLowerCase();
@@ -445,25 +464,25 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     style.id = 'polytrack-ext-style';
     style.textContent = `
       #overallLeaderboardPanel{display:none;position:fixed;inset:0;z-index:10001;background:rgba(13,17,37,.96);backdrop-filter: blur(4px);padding:18px;overflow-y:auto;color:var(--text-color,#fff);font-family:ForcedSquare,Arial,sans-serif}
-      .overall-shell{max-width:1060px;max-height:min(88vh,980px);overflow-y:auto;margin:0 auto;background:linear-gradient(180deg,var(--surface-color,#28346a),var(--surface-secondary-color,#212b58));border:2px solid rgba(255,255,255,.16);box-shadow:0 12px 36px rgba(0,0,0,.45)}
+      .overall-shell{max-width:1180px;max-height:min(90vh,1020px);overflow-y:auto;margin:0 auto;background:linear-gradient(180deg,var(--surface-color,#28346a),var(--surface-secondary-color,#212b58));border:2px solid rgba(255,255,255,.16);box-shadow:0 12px 36px rgba(0,0,0,.45)}
       .overall-top{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:2px solid rgba(255,255,255,.14)}
       .overall-top h2{margin:0;font-size:40px;font-weight:normal;color:#8ec7ff}
-      .overall-sub{margin:0;padding:0 22px 14px;color:rgba(255,255,255,.72);font-size:18px}
+      .overall-sub{margin:0;padding:0 22px 14px;color:rgba(255,255,255,.78);font-size:20px;line-height:1.35}
       #closeOverallLeaderboard,#overallHelpBtn{cursor:pointer;transition:transform .12s ease, filter .12s ease, box-shadow .12s ease}
       #closeOverallLeaderboard:hover,#overallHelpBtn:hover{transform:translateY(-1px);filter:brightness(1.08);box-shadow:0 0 12px rgba(142,199,255,.25)}
       #overallLeaderboardList{padding:0 12px 12px;display:flex;flex-direction:column;gap:8px}
       #overallHelpPopup{display:none;position:absolute;inset:0;background:rgba(9,13,30,.78);backdrop-filter:blur(2px);align-items:center;justify-content:center;z-index:3}
-      .overall-help-card{max-width:560px;background:linear-gradient(180deg,#24305f,#1a244b);border:1px solid rgba(255,255,255,.2);padding:16px 18px;box-shadow:0 12px 28px rgba(0,0,0,.4)}
-      .overall-help-card h3{margin:0 0 8px;font-size:28px;color:#9ed5ff;font-weight:normal}
-      .overall-help-card p{margin:0 0 8px;font-size:16px;color:rgba(255,255,255,.85);line-height:1.35}
-      .overall-help-card .small{font-size:14px;color:rgba(255,255,255,.65)}
+      .overall-help-card{max-width:760px;background:linear-gradient(180deg,#24305f,#1a244b);border:1px solid rgba(255,255,255,.2);padding:20px 22px;box-shadow:0 12px 28px rgba(0,0,0,.4)}
+      .overall-help-card h3{margin:0 0 10px;font-size:34px;color:#9ed5ff;font-weight:normal}
+      .overall-help-card p{margin:0 0 10px;font-size:19px;color:rgba(255,255,255,.9);line-height:1.4}
+      .overall-help-card .small{font-size:16px;color:rgba(255,255,255,.72)}
       .overall-help-actions{display:flex;justify-content:flex-end;margin-top:8px}
       #overallHelpClose{cursor:pointer;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:7px 12px}
       .overall-entry{display:flex;align-items:center;padding:12px;background:var(--surface-tertiary-color,#192042);border:1px solid rgba(255,255,255,.08);opacity:0;transform:translateY(8px);animation:overallEntryIn .26s ease forwards}
-      .overall-entry.top-3{border-color:rgba(255,217,89,.7);background:linear-gradient(90deg,rgba(255,217,89,.14),rgba(25,32,66,.9))}
+      .overall-entry.top-3{border-color:rgba(255,217,89,.7);background:linear-gradient(90deg,rgba(255,217,89,.14),rgba(25,32,66,.9))}.overall-entry.top-1{border-color:rgba(255,231,128,.95);background:linear-gradient(90deg,rgba(255,231,128,.35),rgba(70,56,18,.42))}.overall-entry.top-2{border-color:rgba(205,221,255,.9);background:linear-gradient(90deg,rgba(205,221,255,.22),rgba(45,56,88,.35))}.overall-entry.top-3{border-color:rgba(255,191,120,.9);background:linear-gradient(90deg,rgba(255,191,120,.2),rgba(78,46,22,.32))}
       .overall-rank{width:88px;text-align:center;font-size:28px;color:#82beff}.overall-car-model{width:64px;height:28px;border-radius:8px;display:inline-flex;align-items:flex-end;justify-content:center;margin-right:9px;border:1px solid rgba(255,255,255,.25);vertical-align:middle;box-shadow:inset 0 0 14px rgba(0,0,0,.28);overflow:hidden;position:relative}.overall-car-model img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.overall-car-model img.show{mix-blend-mode:multiply;opacity:.95}.overall-car{display:none}
       .overall-name{flex:1;font-size:24px;padding:0 12px;white-space:normal;overflow-wrap:anywhere}
-      .overall-stats{text-align:right;min-width:250px}.overall-score{font-size:28px;color:#6fe1ff}.overall-races{font-size:15px;color:rgba(255,255,255,.7)}
+      .overall-mid{min-width:200px;text-align:center}.overall-move{font-size:18px;font-weight:bold}.overall-move.up{color:#7CFF8A}.overall-move.down{color:#FF7C7C}.overall-move.flat{color:#A8A8A8}.overall-best{font-size:13px;color:rgba(210,230,255,.75)}.overall-stats{text-align:right;min-width:250px}.overall-score{font-size:28px;color:#6fe1ff}.overall-races{font-size:15px;color:rgba(255,255,255,.7)}
       .staticFunPill{animation:staticGlowPulse 1.8s ease-in-out infinite}.staticFunHover{transition:transform .16s ease, filter .16s ease, box-shadow .16s ease}
       .staticFunHover:hover{transform:translateY(-2px) scale(1.05);filter:brightness(1.18);box-shadow:0 0 18px rgba(255,255,255,0.20),0 0 30px rgba(0,255,255,0.18)}
       .staticFunText{display:inline-block;white-space:nowrap;perspective:600px;animation:staticFloat 2.2s ease-in-out infinite}
@@ -601,7 +620,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       score: Math.max(1.000001, Number(entry.score ?? entry.averageRank ?? 1.000001) || 1.000001),
       raceCount: Number(entry.raceCount || 0),
       totalTracks: Number(entry.totalTracks || TOTAL_TRACKS) || TOTAL_TRACKS,
-      carColors: String(entry.carColors || 'ffffff8ec7ff28346a212b58').slice(0,24)
+      carColors: String(entry.carColors || 'ffffff8ec7ff28346a212b58').slice(0,24),
+      bestTrackId: String(entry.bestTrackId || ''),
+      bestTrackRank: Number(entry.bestTrackRank || 0) || 0,
+      movement: Number(entry.movement || 0) || 0
     })).sort((a,b)=>a.rank-b.rank).slice(0, 50);
   }
 
@@ -718,11 +740,12 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       entries.sort((a,b)=>a.timeMs-b.timeMs);
       entries.forEach((entry, idx)=>{
         const rank = idx + 1;
-        const cur = userAgg.get(entry.userId) || { userId: entry.userId, name: entry.name, carColors: entry.carColors || null, rankSum:0, tracks:new Set() };
+        const cur = userAgg.get(entry.userId) || { userId: entry.userId, name: entry.name, carColors: entry.carColors || null, rankSum:0, tracks:new Set(), bestTrackId:null, bestTrackRank:9999 };
         cur.name = entry.name || cur.name;
         cur.carColors = entry.carColors || cur.carColors;
         cur.rankSum += rank;
         cur.tracks.add(trackId);
+        if (rank < cur.bestTrackRank) { cur.bestTrackRank = rank; cur.bestTrackId = trackId; }
         userAgg.set(entry.userId, cur);
       });
     }
@@ -736,10 +759,25 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const trackDepthBonus = 1 / (1 + Math.log2(1 + played));
       const uidTiebreak = ((String(u.userId).split('').reduce((acc, ch)=>acc + ch.charCodeAt(0), 0) % 997) + 1) / 1000000;
       const score = Math.max(1.000001, 1 + (Math.max(0, avgRank - 1) * fieldWeight) + (trackDepthBonus * 0.2) + uidTiebreak);
-      return { userId: u.userId, name: getLastKnownName(u.userId) || u.name, carColors: String(u.carColors || 'ffffff8ec7ff28346a212b58').slice(0,24), score, raceCount: played, totalTracks };
+      return { userId: u.userId, name: getLastKnownName(u.userId) || u.name, carColors: String(u.carColors || 'ffffff8ec7ff28346a212b58').slice(0,24), score, raceCount: played, totalTracks, bestTrackId: u.bestTrackId || null, bestTrackRank: Number(u.bestTrackRank || 0) || 0 };
     }).sort((a,b)=>a.score-b.score || b.raceCount-a.raceCount || String(a.userId).localeCompare(String(b.userId)))
       .slice(0,50)
       .map((row, idx)=>({ rank: idx + 1, ...row }));
+    return out;
+  }
+
+  function annotateOverallMovement(entries){
+    let prevMap = {};
+    try { prevMap = JSON.parse(localStorage.getItem('polytrack-overall-prev-ranks-v1') || '{}') || {}; } catch {}
+    const out = entries.map((e)=>{
+      const prev = Number(prevMap[e.userId] || e.rank);
+      return { ...e, movement: prev - e.rank };
+    });
+    try {
+      const next = {};
+      for (const e of out) next[e.userId] = e.rank;
+      localStorage.setItem('polytrack-overall-prev-ranks-v1', JSON.stringify(next));
+    } catch {}
     return out;
   }
 
@@ -758,19 +796,19 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       if (computed.length) {
         d.collection('leaderboards_overall').doc('main').set({ entries: computed, updatedAt: Date.now(), seededBy: MARKER }, { merge: true }).catch(()=>{});
       }
-      return best;
+      return annotateOverallMovement(best);
     } catch (error) {
       if (isLocalApiCapableHost()) {
         try {
           const res = await fetch('/api/overall-leaderboard', { cache: 'no-store' });
           if (res.ok) {
             const data = await res.json();
-            return normalizeEntries(data.entries || []);
+            return annotateOverallMovement(normalizeEntries(data.entries || []));
           }
         } catch {}
       }
       const localRows = readLocalRaceRows();
-      if (localRows.length) return normalizeEntries(computeOverallFromRaceRows(localRows));
+      if (localRows.length) return annotateOverallMovement(normalizeEntries(computeOverallFromRaceRows(localRows)));
       console.warn('Failed to load overall leaderboard:', error);
       return direct || [];
     }
@@ -787,10 +825,10 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         { rank:4, name:'Test Chassis', carColors:'70a1ff', score:1.040, raceCount:9, totalTracks:47 },
         { rank:5, name:'Ghost Entry', carColors:'eccc68', score:1.012, raceCount:8, totalTracks:47 }
       ];
-      listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">${tr('placeholderNote')}</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${carModelPreview(entry.carColors)}${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
+      listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">${tr('placeholderNote')}</span></div>${placeholders.map((entry,index)=>`<div class="overall-entry ${entry.rank===1?'top-1':entry.rank===2?'top-2':entry.rank===3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${carModelPreview(entry.carColors)}${entry.name}${entry.rank===1?'<div style="font-size:12px;color:rgba(190,190,190,.9);margin-top:2px;">This could be you!</div>':''}</span><div class="overall-mid"><div class="overall-move ${entry.movement>0?'up':entry.movement<0?'down':'flat'}">${entry.movement>0?'▲ +'+entry.movement:entry.movement<0?'▼ '+Math.abs(entry.movement):'• 0'}</div><div class="overall-best">${entry.bestTrackId?`Best #${entry.bestTrackRank} · ${entry.bestTrackId.slice(0,6)}`:'Best track: —'}</div></div><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('')}`;
       return;
     }
-    listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank<=3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${carModelPreview(entry.carColors)}${entry.name}</span><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
+    listEl.innerHTML = entries.map((entry,index)=>`<div class="overall-entry ${entry.rank===1?'top-1':entry.rank===2?'top-2':entry.rank===3?'top-3':''}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${entry.rank}</span><span class="overall-name">${carModelPreview(entry.carColors)}${entry.name}</span><div class="overall-mid"><div class="overall-move ${entry.movement>0?'up':entry.movement<0?'down':'flat'}">${entry.movement>0?'▲ +'+entry.movement:entry.movement<0?'▼ '+Math.abs(entry.movement):'• 0'}</div><div class="overall-best">${entry.bestTrackId?`Best #${entry.bestTrackRank} · ${entry.bestTrackId.slice(0,6)}`:'Best track: —'}</div></div><div class="overall-stats"><div class="overall-score">${entry.score.toFixed(3)}</div><div class="overall-races">${entry.raceCount}/${entry.totalTracks} tracks</div></div></div>`).join('');
   }
 
   async function openPanel(){
@@ -977,7 +1015,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         const snaps = await Promise.all(ids.map((id)=>d.collection('race_results').where('uploadId','==',id).limit(1).get()));
         return snaps.map((snap)=>{
           const row = snap?.docs?.[0]?.data?.() || null;
-          if (!row) return null;
+          if (!row || !String(row.replay || '')) return null;
           return {
             recording: String(row.replay || ''),
             verifiedState: Number.isFinite(Number(row.verifiedState)) ? Number(row.verifiedState) : 0,
@@ -1210,15 +1248,23 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     button.style.animationDelay = (0.3 + existing.length * 0.1).toFixed(1) + 's';
     container.appendChild(button);
     if (!rankingsSpawnedOnce) {
-      requestAnimationFrame(()=>{
-        button.classList.remove('button-spawn');
-        void button.offsetWidth;
-        button.classList.add('button-spawn');
-        button.style.animation = '';
-        setTimeout(()=>{ try { button.classList.remove('button-spawn'); } catch {} }, 1300);
-        rankingsSpawnedOnce = true;
-        window.__polytrackRankingsAnimated = true;
-      });
+      const spawnWithSync = (attempt=0)=>{
+        const playBtn = Array.from(container.querySelectorAll('button')).find((b)=>/play/i.test((b.textContent||'').trim()));
+        const playAnimating = !!(playBtn && ((playBtn.classList && playBtn.classList.contains('button-spawn')) || getComputedStyle(playBtn).animationName === 'buttonSpawn'));
+        if (!playAnimating && attempt < 20) { setTimeout(()=>spawnWithSync(attempt+1), 80); return; }
+        requestAnimationFrame(()=>{
+          button.classList.remove('button-spawn');
+          void button.offsetWidth;
+          button.classList.add('button-spawn');
+          button.style.animationName = 'buttonSpawn';
+          button.style.animationDuration = '0.36s';
+          button.style.animationFillMode = 'backwards';
+          setTimeout(()=>{ try { button.classList.remove('button-spawn'); button.style.animationName=''; button.style.animationDuration=''; button.style.animationFillMode=''; } catch {} }, 1300);
+          rankingsSpawnedOnce = true;
+          window.__polytrackRankingsAnimated = true;
+        });
+      };
+      spawnWithSync();
     } else {
       button.classList.remove('button-spawn');
       button.style.animation = 'none';
@@ -1316,4 +1362,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v30 */
+/* polytrack-extension-inline-v31 */
