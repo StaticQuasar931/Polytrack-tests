@@ -23,7 +23,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
 
 ;(()=>{
-  const MARKER = "polytrack-extension-inline-v29";
+  const MARKER = "polytrack-extension-inline-v30";
   if (window.__polytrackExtensionLoaded === MARKER) return;
   window.__polytrackExtensionLoaded = MARKER;
 
@@ -170,7 +170,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const cleaned = String(colors || '').replace(/[^0-9a-fA-F]/g,'').slice(0,24);
     const c1 = cleaned.slice(0,6) || '8ec7ff';
     const c2 = cleaned.slice(6,12) || '28346a';
-    return `<span class="overall-car-model" style="background-image:url('images/car_thumbnail_placeholder.png');background-size:cover;background-position:center"><span class="overall-car" style="background:linear-gradient(135deg,#${c1} 0%,#${c2} 100%)"></span></span>`;
+    const overlaySvg = encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 110'><rect x='20' y='42' rx='12' ry='12' width='160' height='42' fill='#${c1}'/><rect x='24' y='54' rx='9' ry='9' width='152' height='10' fill='#${c2}' opacity='0.95'/><rect x='52' y='30' rx='8' ry='8' width='96' height='20' fill='#${c2}' opacity='0.88'/></svg>`);
+    return `<span class="overall-car-model image-container"><img src="images/car_thumbnail_placeholder.png" alt="car"/><img src="data:image/svg+xml;utf8,${overlaySvg}" class="show" alt="car colors"/></span>`;
   }
 
   function isLocalApiCapableHost(){
@@ -460,7 +461,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       #overallHelpClose{cursor:pointer;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:7px 12px}
       .overall-entry{display:flex;align-items:center;padding:12px;background:var(--surface-tertiary-color,#192042);border:1px solid rgba(255,255,255,.08);opacity:0;transform:translateY(8px);animation:overallEntryIn .26s ease forwards}
       .overall-entry.top-3{border-color:rgba(255,217,89,.7);background:linear-gradient(90deg,rgba(255,217,89,.14),rgba(25,32,66,.9))}
-      .overall-rank{width:88px;text-align:center;font-size:28px;color:#82beff}.overall-car-model{width:64px;height:28px;border-radius:8px;display:inline-flex;align-items:flex-end;justify-content:center;margin-right:9px;border:1px solid rgba(255,255,255,.25);vertical-align:middle;box-shadow:inset 0 0 14px rgba(0,0,0,.28)}.overall-car{width:32px;height:8px;border-radius:999px;display:inline-block;margin-bottom:4px;border:1px solid rgba(255,255,255,.45);vertical-align:middle}
+      .overall-rank{width:88px;text-align:center;font-size:28px;color:#82beff}.overall-car-model{width:64px;height:28px;border-radius:8px;display:inline-flex;align-items:flex-end;justify-content:center;margin-right:9px;border:1px solid rgba(255,255,255,.25);vertical-align:middle;box-shadow:inset 0 0 14px rgba(0,0,0,.28);overflow:hidden;position:relative}.overall-car-model img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.overall-car-model img.show{mix-blend-mode:multiply;opacity:.95}.overall-car{display:none}
       .overall-name{flex:1;font-size:24px;padding:0 12px;white-space:normal;overflow-wrap:anywhere}
       .overall-stats{text-align:right;min-width:250px}.overall-score{font-size:28px;color:#6fe1ff}.overall-races{font-size:15px;color:rgba(255,255,255,.7)}
       .staticFunPill{animation:staticGlowPulse 1.8s ease-in-out infinite}.staticFunHover{transition:transform .16s ease, filter .16s ease, box-shadow .16s ease}
@@ -933,18 +934,41 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       const trackId = String(urlObj.searchParams.get('trackId') || hinted.trackId || '').slice(0,80);
       if (!trackId) return makeLeaderboardPayload(method);
       let mirrorMeta = null;
+      const amount = Math.min(100, Number(urlObj.searchParams.get('amount') || 20) || 20);
+      let preEntries = [];
       if (String(method).toUpperCase() === 'POST') {
+        preEntries = await getTrackEntries(trackId, amount).catch(()=>[]);
         log('info','[NET202] /leaderboard POST intercepted',{trackId});
         try { mirrorMeta = await mirrorRaceResult(urlObj.toString(), body); } catch {}
       }
       const accountId = resolveProfileAccountId(hinted, String(urlObj.searchParams.get('userTokenHash') || hinted.userTokenHash || hinted.userId || hinted.accountId || mirrorMeta?.accountId || localStorage.getItem('polytrack-active-account-id') || guestAccountId));
-      const entries = await getTrackEntries(trackId, Math.min(100, Number(urlObj.searchParams.get('amount') || 20) || 20)).catch(()=>[]);
+      const entries = await getTrackEntries(trackId, amount).catch(()=>[]);
       const mine = entries.find((e)=>String(e.accountId||'')===String(accountId||''));
+      const prevMine = preEntries.find((e)=>String(e.accountId||'')===String(accountId||''));
       const myPos = safePositiveInt(mine?.rank || mine?.position || 1, 1);
-      return makeLeaderboardPayload(method, entries, myPos, myPos, mirrorMeta?.uploadId || null, accountId);
+      const prevPos = safePositiveInt(prevMine?.rank || prevMine?.position || myPos, myPos);
+      return makeLeaderboardPayload(method, entries, myPos, prevPos, mirrorMeta?.uploadId || null, accountId);
     }
 
     if (urlObj.pathname === '/recordings') {
+      if (String(method).toUpperCase() === 'POST') {
+        const payload = parsePayload(body) || {};
+        const recId = safeRecordingId(payload.recordingId || payload.id || payload.uploadId) || nextUploadId();
+        const recData = String(payload.recording || payload.replay || payload.replayData || payload.data || '');
+        const frames = safePositiveInt(payload.frames || payload.numberOfFrames || payload.raceTimeFrames || 1, 1);
+        const recColors = String(payload.carColors || payload.CarColors || localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '').slice(0,64) || null;
+        writeRecordingStore(recId, { recording: recData, frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: recColors || undefined });
+        log('info','[FB211] recordings POST normalized',{recordingId:recId,frames,bytes:recData.length,carColors:recColors});
+        try {
+          const d = await db();
+          const q = await d.collection('race_results').where('uploadId','==',recId).limit(10).get();
+          await Promise.all((q.docs||[]).map((doc)=>doc.ref.set({ replay: recData, raceTimeFrames: frames, carColors: recColors || doc.data()?.carColors || null }, { merge:true })));
+          log('info','[FB212] recordings POST upserted',{recordingId:recId,matched:(q.docs||[]).length});
+        } catch (error) {
+          log('warn','[FB412] recordings POST firestore upsert failed', String(error && (error.message || error)));
+        }
+        return { success:true, recordingId:recId };
+      }
       const ids = String(urlObj.searchParams.get('recordingIds') || '').split(',').map((x)=>safeRecordingId(x)).filter(Boolean);
       const fromLocal = readRecordingStore(ids);
       if (ids.length && fromLocal.some((x)=>x)) return fromLocal;
@@ -1020,6 +1044,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
           : (Number.isFinite(maybeTotal) && maybeTotal > 60000
               ? maybeTotal
               : (frames > 0 ? Math.round((frames * 1000) / 60) : 0)));
+    const replayData = payload.replay || payload.replayData || payload.recording || payload.recordingData || payload.ghost || payload.ghostData || payload?.data?.replay || payload?.data?.recording || '';
     const replaySig = String(payload.replayHash || payload.uploadId || '').slice(0,128);
     const carColors = String(payload.carColors || payload.CarColors || localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '').slice(0,64) || null;
     const mirrorSig = `${accountId}|${trackId}|${timeMs}|${frames}|${replaySig}`;
@@ -1034,9 +1059,9 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const createdAt = Date.now();
     const uploadId = safeRecordingId(payload.uploadId) || nextUploadId();
     const carId = String(payload.car || payload.carId || payload.carName || '').slice(0,64) || null;
-    log('info','[FB210] mirror payload normalized',{accountId,trackId,timeMs,frames,uploadId,name,carColors,hasReplay:!!(payload.replay||payload.replayData)});
-        addLocalRaceRow({ accountId, userId: accountId, trackId, name, timeMs, frames, raceTimeFrames: frames, uploadId, replayHash: replaySig || null, replay: payload.replay || payload.replayData || null, carId, carColors, createdAt, verifiedState: Number(payload.verifiedState || 0) || 0 });
-    writeRecordingStore(uploadId, { recording: payload.replay || payload.replayData || '', frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: carColors || undefined });
+    log('info','[FB210] mirror payload normalized',{accountId,trackId,timeMs,frames,uploadId,name,carColors,hasReplay:!!replayData,replayBytes:String(replayData||'').length});
+        addLocalRaceRow({ accountId, userId: accountId, trackId, name, timeMs, frames, raceTimeFrames: frames, uploadId, replayHash: replaySig || null, replay: replayData || null, carId, carColors, createdAt, verifiedState: Number(payload.verifiedState || 0) || 0 });
+    writeRecordingStore(uploadId, { recording: replayData || '', frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: carColors || undefined });
     try {
       const d = await db();
             lastMirrorSig = mirrorSig;
@@ -1047,7 +1072,7 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         trackId,
         name,
         timeMs,
-        replay: payload.replay || payload.replayData || null,
+        replay: replayData || null,
         replayHash: replaySig || null,
         carId,
         carColors,
@@ -1199,6 +1224,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       button.style.animation = 'none';
     }
     button.innerHTML = `<img src="images/trophy.svg"><p>${tRankedWord()}</p>`;
+    button.style.pointerEvents = 'auto';
+    button.style.zIndex = '5';
     button.addEventListener('click', (event)=>{ event.preventDefault(); event.stopPropagation(); openPanel(); });
     button.style.order = '999';
     rankingsButtonRef = button;
@@ -1289,4 +1316,4 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once:true });
   else boot();
 })();
-/* polytrack-extension-inline-v29 */
+/* polytrack-extension-inline-v30 */
