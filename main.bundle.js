@@ -46,6 +46,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   let localUploadCounter = Number(localStorage.getItem('polytrack-upload-counter') || '0') || 0;
   let nativeMenuButtonsAnimating = false;
   let lastRankedSpawnAt = 0;
+  let mainButtonsWereVisible = false;
+  let mainButtonsShownAt = 0;
   const GUEST_ID_KEY = 'polytrack-guest-account-id';
   function randomGuestSuffix(){
     try {
@@ -175,19 +177,53 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     const cleaned = String(colors || '').replace(/[^0-9a-fA-F]/g,'').toLowerCase();
     return (cleaned + fallback).slice(0, 24);
   }
-  function splitCarColorId(colors){
-    const id = normalizeCarColorId(colors);
-    return {
-      id,
-      primary: `#${id.slice(0, 6)}`,
-      secondary: `#${id.slice(6, 12)}`,
-      frame: `#${id.slice(12, 18)}`,
-      rims: `#${id.slice(18, 24)}`
-    };
+  function cleanCarId(value){
+    return String(value || '').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 64);
   }
-  function carModelPreview(colors){
-    const c = splitCarColorId(colors);
-    return `<span class="overall-car-model image-container" data-carcolorid="${c.id}" title="carcolorid ${c.id}"><img class="overall-car-base show" src="images/car_thumbnail_placeholder.png" alt="car"/><span class="overall-car-tint" style="background:${c.primary}"></span><span class="overall-car-stripe" style="background:${c.secondary}"></span><span class="overall-car-frame" style="border-color:${c.frame}"></span><span class="overall-car-rim left" style="border-color:${c.rims}"></span><span class="overall-car-rim right" style="border-color:${c.rims}"></span></span>`;
+  function cleanUserId(value){
+    return String(value || '').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 128);
+  }
+  function carModelPreview(colors, carId='', userId=''){
+    const colorId = normalizeCarColorId(colors);
+    const safeCarId = cleanCarId(carId);
+    const safeUserId = cleanUserId(userId);
+    return `<span class="overall-car-model image-container" data-carcolorid="${colorId}" data-carid="${safeCarId}" data-userid="${safeUserId}" title="carcolorid ${colorId}"><img class="show" src="images/car_thumbnail_placeholder.png" alt="car"/><img alt="car render"/></span>`;
+  }
+  const overallCarRenderCache = new Map();
+  function getCarThumbRenderer(){
+    if (typeof BT === 'function') return BT;
+    if (typeof window.BT === 'function') return window.BT;
+    return null;
+  }
+  function hydrateOverallCarModels(root){
+    if (!root) return;
+    const renderThumb = getCarThumbRenderer();
+    if (!renderThumb) return;
+    const nodes = Array.from(root.querySelectorAll('.overall-car-model.image-container'));
+    nodes.forEach((node)=>{
+      const colorId = normalizeCarColorId(node.dataset.carcolorid || '');
+      const carId = cleanCarId(node.dataset.carid || '');
+      const key = `${colorId}|${carId}`;
+      const imgs = node.querySelectorAll('img');
+      const placeholder = imgs[0];
+      const rendered = imgs[1];
+      if (!placeholder || !rendered) return;
+      node.dataset.renderKey = key;
+      const cached = overallCarRenderCache.get(key);
+      if (cached) {
+        rendered.src = cached;
+        placeholder.classList.remove('show');
+        rendered.classList.add('show');
+        return;
+      }
+      Promise.resolve(renderThumb(colorId, carId || null)).then((src)=>{
+        if (!src || node.dataset.renderKey !== key) return;
+        overallCarRenderCache.set(key, src);
+        rendered.src = src;
+        placeholder.classList.remove('show');
+        rendered.classList.add('show');
+      }).catch(()=>{});
+    });
   }
 
 
@@ -327,7 +363,9 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         userId,
         accountId: userId,
         name: String(entry?.name || getLastKnownName(userId) || 'Guest').slice(0, 24),
-        carColors: String(entry?.carColors || 'ffffff8ec7ff28346a212b58').slice(0, 24),
+        carColors: normalizeCarColorId(entry?.carColors || 'ffffff8ec7ff28346a212b58'),
+        carColorId: normalizeCarColorId(entry?.carColorId || entry?.carColors || 'ffffff8ec7ff28346a212b58'),
+        carId: cleanCarId(entry?.carId || ''),
         verifiedState: Number.isFinite(Number(entry?.verifiedState)) ? Number(entry.verifiedState) : 0,
         rank,
         position: rank,
@@ -525,13 +563,8 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       .overall-rank{width:88px;text-align:center;font-size:30px;color:#82beff}
       .overall-entry.top-1 .overall-rank{font-size:36px;color:#ffeeb0}
       .overall-car-model{width:98px;height:44px;border-radius:8px;display:inline-flex;align-items:flex-end;justify-content:center;margin-right:10px;border:1px solid rgba(255,255,255,.3);vertical-align:middle;box-shadow:inset 0 0 14px rgba(0,0,0,.35);overflow:hidden;position:relative;background:rgba(4,9,22,.45)}
-      .overall-car-model .overall-car-base{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.95}
-      .overall-car-model .overall-car-tint{position:absolute;inset:0;mix-blend-mode:multiply;opacity:.9}
-      .overall-car-model .overall-car-stripe{position:absolute;left:18%;right:18%;top:46%;height:15%;border-radius:3px;opacity:.9;mix-blend-mode:multiply}
-      .overall-car-model .overall-car-frame{position:absolute;inset:2px;border:2px solid transparent;border-radius:7px;opacity:.65}
-      .overall-car-model .overall-car-rim{position:absolute;bottom:3px;width:13px;height:13px;border:2px solid transparent;border-radius:50%;background:rgba(0,0,0,.45)}
-      .overall-car-model .overall-car-rim.left{left:21px}
-      .overall-car-model .overall-car-rim.right{right:21px}
+      .overall-car-model > img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .14s ease}
+      .overall-car-model > img.show{opacity:1}
       .overall-name{font-size:28px;padding:0 10px;white-space:normal;overflow-wrap:anywhere;display:flex;align-items:center}
       .overall-mid{min-width:210px;text-align:center}
       .overall-move{font-size:22px;font-weight:bold}
@@ -927,17 +960,20 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
   }
 
   function renderEntryRow(entry, index, showTopHint=false){
-    const row = normalizeEntries([entry])[0] || normalizeEntries([])[0];
+    const normalized = normalizeEntries([entry]);
+    const row = normalized.length ? normalized[0] : { rank: index + 1, name: 'Guest', score: 1.000001, raceCount: 0, totalTracks: TOTAL_TRACKS, carColorId: normalizeCarColorId('') };
     const rank = Number(row?.rank || index + 1) || (index + 1);
     const score = Number(row?.score || 1.000001) || 1.000001;
     const races = Number(row?.raceCount || 0) || 0;
     const totalTracks = Number(row?.totalTracks || TOTAL_TRACKS) || TOTAL_TRACKS;
     const safeName = escapeHtml(row?.name || 'Guest');
     const safeColorId = normalizeCarColorId(row?.carColorId || row?.carColors || '');
+    const safeCarId = cleanCarId(row?.carId || '');
+    const safeUserId = cleanUserId(row?.userId || row?.accountId || '');
     const best = bestTrackMarkup(row);
     const move = movementMarkup(row?.movement || 0);
     const extra = showTopHint ? '<div style="font-size:13px;color:rgba(225,225,225,.9);margin-top:2px;">This could be you</div>' : '';
-    return `<div class="overall-entry ${rank===1?'top-1':rank===2?'top-2':rank===3?'top-3':''}" data-carcolorid="${safeColorId}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${rank}</span><span class="overall-name">${carModelPreview(safeColorId)}${safeName}${extra}</span><div class="overall-mid">${move}<div class="overall-best">${best}</div></div><div class="overall-stats"><div class="overall-score">${score.toFixed(3)}</div><div class="overall-races">${races}/${totalTracks} tracks</div></div></div>`;
+    return `<div class="overall-entry ${rank===1?'top-1':rank===2?'top-2':rank===3?'top-3':''}" data-carcolorid="${safeColorId}" style="animation-delay:${(index*0.04).toFixed(2)}s"><span class="overall-rank">#${rank}</span><span class="overall-name">${carModelPreview(safeColorId, safeCarId, safeUserId)}${safeName}${extra}</span><div class="overall-mid">${move}<div class="overall-best">${best}</div></div><div class="overall-stats"><div class="overall-score">${score.toFixed(3)}</div><div class="overall-races">${races}/${totalTracks} tracks</div></div></div>`;
   }
 
   function renderEntries(entries){
@@ -952,9 +988,11 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
         { rank:5, name:'Ghost Entry', carColors:'eccc68', score:1.052, raceCount:8, totalTracks:47 }
       ];
       listEl.innerHTML = `<div class="overall-entry"><span class="overall-name">${tr('placeholderNote')}</span></div>${placeholders.map((entry,index)=>renderEntryRow(entry, index, entry.rank===1)).join('')}`;
+      hydrateOverallCarModels(listEl);
       return;
     }
     listEl.innerHTML = entries.map((entry,index)=>renderEntryRow(entry, index, false)).join('');
+    hydrateOverallCarModels(listEl);
   }
 
   async function openPanel(){
@@ -1001,12 +1039,15 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
     };
   }
 
-  function makeLeaderboardPayload(method, entries=[], position=1, previousPosition=1, forcedUploadId=null, forcedUserEntryId=null){
+  function makeLeaderboardPayload(method, entries=[], position=1, previousPosition=1, forcedUploadId=null, forcedUserEntryId=null, forcedUserEntry=null){
     const normalizedEntries = enrichLegacyLeaderboardEntries(entries);
     const pos = safePositiveInt(position, 1);
     const prevPos = safePositiveInt(previousPosition, pos);
     const isPost = String(method).toUpperCase() === 'POST';
     const displayPos = isPost ? prevPos : pos;
+    const resolvedUploadId = isPost ? (safeRecordingId(forcedUploadId) || nextUploadId()) : null;
+    const explicitUser = forcedUserEntry && typeof forcedUserEntry === 'object' ? forcedUserEntry : null;
+    const sourceUser = explicitUser || normalizedEntries.find((e)=>String(e.accountId||e.userId||'')===String(forcedUserEntryId||'')) || null;
     const base = {
       entries: normalizedEntries,
       Entries: normalizedEntries,
@@ -1021,17 +1062,17 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       previousPosition: prevPos,
       PreviousPosition: prevPos,
       positionChange: displayPos - pos,
-      uploadId: null,
+      uploadId: resolvedUploadId,
       success: true,
       verifiedState: 0,
-      entry: normalizedEntries[0] || null,
+      entry: sourceUser || normalizedEntries[0] || null,
       userEntry: null
     };
-    if (method === 'POST') base.uploadId = safeRecordingId(forcedUploadId) || nextUploadId();
-    const sourceUser = normalizedEntries.find((e)=>String(e.accountId||e.userId||'')===String(forcedUserEntryId||'')) || normalizedEntries[pos-1] || normalizedEntries[0] || null;
     if (sourceUser) {
-      const sourceId = safeRecordingId(sourceUser.id) || safeRecordingId(sourceUser.uploadId) || (method === 'POST' ? (safeRecordingId(forcedUploadId) || nextUploadId()) : null);
+      const sourceId = safeRecordingId(sourceUser.id) || safeRecordingId(sourceUser.uploadId) || resolvedUploadId;
       base.userEntry = { id: sourceId, position: displayPos, newPosition: pos, frames: sourceUser.frames || sourceUser.time?.numberOfFrames || 1 };
+    } else if (resolvedUploadId) {
+      base.userEntry = { id: resolvedUploadId, position: displayPos, newPosition: pos, frames: 1 };
     }
     return base;
   }
@@ -1106,20 +1147,22 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
       if (!trackId) return makeLeaderboardPayload(method);
       let mirrorMeta = null;
       const amount = Math.min(100, Number(urlObj.searchParams.get('amount') || 20) || 20);
+      const scanLimit = Math.max(200, amount);
       let preEntries = [];
       if (String(method).toUpperCase() === 'POST') {
-        preEntries = await getTrackEntries(trackId, amount).catch(()=>[]);
+        preEntries = await getTrackEntries(trackId, scanLimit).catch(()=>[]);
         log('info','[NET202] /leaderboard POST intercepted',{trackId});
         try { mirrorMeta = await mirrorRaceResult(urlObj.toString(), body); } catch {}
       }
       const accountId = resolveProfileAccountId(hinted, String(urlObj.searchParams.get('userTokenHash') || hinted.userTokenHash || hinted.userId || hinted.accountId || mirrorMeta?.accountId || localStorage.getItem('polytrack-active-account-id') || guestAccountId));
       const entries = await getTrackEntries(trackId, amount).catch(()=>[]);
-      const mine = entries.find((e)=>String(e.accountId||'')===String(accountId||''));
+      const fullEntries = amount >= scanLimit ? entries : await getTrackEntries(trackId, scanLimit).catch(()=>entries);
+      const mine = fullEntries.find((e)=>String(e.accountId||'')===String(accountId||''));
       const prevMine = preEntries.find((e)=>String(e.accountId||'')===String(accountId||''));
-      const fallbackPos = Math.max(1, entries.length + 1);
+      const fallbackPos = Math.max(1, fullEntries.length + 1);
       const myPos = mine ? safePositiveInt(mine?.rank || mine?.position || fallbackPos, fallbackPos) : fallbackPos;
       const prevPos = prevMine ? safePositiveInt(prevMine?.rank || prevMine?.position || myPos, myPos) : myPos;
-      return makeLeaderboardPayload(method, entries, myPos, prevPos, mirrorMeta?.uploadId || null, accountId);
+      return makeLeaderboardPayload(method, entries, myPos, prevPos, mirrorMeta?.uploadId || null, accountId, mine);
     }
 
     if (urlObj.pathname === '/recordings') {
@@ -1385,19 +1428,38 @@ var PW=function(e,t,n,i){return new(n||(n=Promise))((function(r,a){function s(e)
 
   function syncRankingsButtonAnimation(button, container){
     if (!button || !container) return;
+    const containerVisible = getComputedStyle(container).display !== 'none' && getComputedStyle(container).visibility !== 'hidden';
+    if (containerVisible && !mainButtonsWereVisible) {
+      mainButtonsWereVisible = true;
+      mainButtonsShownAt = Date.now();
+      nativeMenuButtonsAnimating = false;
+      rankingsSpawnedOnce = false;
+    } else if (!containerVisible) {
+      mainButtonsWereVisible = false;
+      nativeMenuButtonsAnimating = false;
+      return;
+    }
     const nativeButtons = Array.from(container.querySelectorAll('button.button-image')).filter((el)=>el.id !== 'injectedRankingsBtn');
     const active = nativeButtons.some((el)=>{
       if (el.classList.contains('button-spawn')) return true;
-      const anim = (getComputedStyle(el).animationName || '').toLowerCase();
-      return anim.includes('button-spawn') || anim.includes('buttonspawn');
+      const style = getComputedStyle(el);
+      const anim = String(style.animationName || '').toLowerCase();
+      const state = String(style.animationPlayState || '').toLowerCase();
+      return (anim.includes('button-spawn') || anim.includes('buttonspawn')) && state !== 'paused';
     });
     if (active && !nativeMenuButtonsAnimating) {
       nativeMenuButtonsAnimating = true;
       setTimeout(()=>triggerRankedButtonSpawn(button), 60);
       rankingsSpawnedOnce = true;
       window.__polytrackRankingsAnimated = true;
-    } else if (!active) {
-      nativeMenuButtonsAnimating = false;
+      return;
+    }
+    if (!active) nativeMenuButtonsAnimating = false;
+    const age = Date.now() - mainButtonsShownAt;
+    if (!rankingsSpawnedOnce && age >= 0 && age <= 650) {
+      triggerRankedButtonSpawn(button);
+      rankingsSpawnedOnce = true;
+      window.__polytrackRankingsAnimated = true;
     }
   }
 
