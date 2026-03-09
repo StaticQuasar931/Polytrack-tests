@@ -31,6 +31,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
   const PROFILE_MAP_KEY = 'polytrack-profile-id-map-v1';
   const LAST_ACTIVE_NAME_KEY = 'polytrack-last-active-name';
   const LAST_ACTIVE_COLORS_KEY = 'polytrack-last-active-colors';
+  const LAST_ACTIVE_CAR_ID_KEY = 'polytrack-last-active-car-id';
   const PROFILE_NAME_WORD_A = ['swift','neon','alpha','turbo','sonic','pixel','nova','lucky','sunny','frost','ember','quantum','crystal','midnight','solar','lunar','hyper','ultra','aero','rapid','vivid','thunder','cosmic','silver','golden','shadow','arc','vector','iron','onyx','starlit','cobalt','ripple','granite','jungle','desert','arctic','magenta','scarlet','violet','teal','sable','amber','jade','ivory','obsidian','cinder','stellar','orbital','zen','rogue','prime','apex','summit','embered','misty','horizon','aurora','glitch','byte','laser','prism','halo','north','south','east','west','tempo','axle','torque','nitro','clutch','summoner','phantom','eclipse','cyclone','monsoon','titan','pegasus','raven','falcon','lynx','otter','comfy','bouncy','cheery','zippy','daring','brisk','fuzzy','mellow','witty','snappy'];
   const PROFILE_NAME_WORD_B = ['racer','drift','pulse','track','echo','comet','storm','shift','vault','spark','dash','glide','runner','rocket','flare','nexus','voyage','blaze','orbit','flux','drive','streak','zenith','quartz','radar','pilot','charger','phantom','matrix','engine','jumper','hopper','sprinter','raider','seeker','keeper','walker','slider','cruiser','strider','booster','chaser','panther','falcon','otter','fox','rhino','yak','wizard','knight','samurai','sage','ranger','captain','doctor','baron','duke','rookie','veteran','legend','maverick','stomper','breaker','spirit','beacon','anchor','vector','module','kernel','vortex','quasar','galaxy','planet','meteor','asteroid','volcano','tsunami','whirl','tempest','charge','vertex','pixel','bit','byte','gear','piston','engineer','driver','rider','climber','surfer','skater','sniper','ace'];
   const DEFAULT_NAME_BLOCKLIST = ["admin","moderator","owner","staff","support","system","dev","developer","verified","helper","official","security","abuse","abuser","anal","anus","arse","arsehole","ass","assbag","assclown","assface","assfuck","assfucker","asshat","asshole","assholes","asslicker","asswipe","ballsack","bastard","bastards","beaner","bitch","bitches","bitchy","blowjob","blowjobs","bollock","bollocks","boner","boob","boobs","booty","brothel","bullshit","buttfuck","butthole","cameltoe","chink","clit","clitoris","cock","cocks","coon","crap","cum","cumming","cunt","cunts","dick","dicks","dildo","dildos","dipshit","doggystyle","douche","douchebag","dyke","fag","faggot","faggots","feck","fellatio","fingerbang","fuck","fucked","fucker","fuckers","fuckface","fucking","fuckoff","fuckwit","fuk","gangbang","gaylord","genitals","gook","handjob","hardcore","hentai","hitler","hoe","hoes","horny","incest","jackass","jerkoff","jizz","kike","kkk","kunt","lesbo","lesbian","loli","masturbate","masturbation","milf","motherfucker","motherfucking","muff","nazi","nazism","negro","nigga","nigger","niggers","nipple","nipples","nutjob","orgasm","orgy","pedo","pedophile","penis","piss","pissed","pisser","playboy","poon","poop","porn","porno","pornhub","prostitute","pussy","queef","queer","raped","raper","rapist","rape","retard","rimjob","scrotum","sex","sexy","shit","shits","shitty","shota","sissy","skank","slut","sluts","smegma","spic","spunk","strapon","suck","sucks","testicle","threesome","tit","tits","titties","titty","tranny","twat","vag","vagina","vibrator","virgin","voyeur","wank","wanker","whore","whores","wtf","xxx","xrated","yaoi","zoophile","zoophilia","alqaeda","isis","terrorist","swastika","1488","molest","molester","underage","childporn","cp","suicide","killyourself","kys","racist","racism","whitepower","wetback","spick","gimp","cripple","idiot","moron","stupid","dumbass","shithead","cumshot","cumslut","deepthroat","fisting","gangrape","gfy","goatse","groomer","hooker","hotsex","humping","jackoff","motherfucker","nutsack","pecker","peehole","peeing","pussylicking","rectum","scat","semen","sexcam","sexchat","sexworker","shemale","slapper","sodomize","sodomy","tard","teabagging","towelhead","tubgirl","unclefucker","upskirt","urethra","urine","vulva","wigger","willy","yid"];
@@ -144,6 +145,27 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
   function cleanUserId(value){
     return String(value || '').replace(/[^a-zA-Z0-9_.:-]/g, '').slice(0, 128);
   }
+  function extractCarId(record){
+    if (!record || typeof record !== 'object') return '';
+    return cleanCarId(
+      record.carId ||
+      record.car ||
+      record.carName ||
+      record.carModel ||
+      record.vehicleId ||
+      record.vehicle ||
+      record.selectedCar ||
+      record.CarId ||
+      ''
+    );
+  }
+  function normalizeThumbResult(value){
+    if (typeof value === 'string') return value;
+    if (value && typeof value.src === 'string') return value.src;
+    if (value && typeof value.url === 'string') return value.url;
+    if (value && typeof value.dataUrl === 'string') return value.dataUrl;
+    return '';
+  }
   function carModelPreview(colors, carId='', userId=''){
     const colorId = normalizeCarColorId(colors);
     const safeCarId = cleanCarId(carId);
@@ -152,14 +174,17 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
   }
   const overallCarRenderCache = new Map();
   function getCarThumbRenderer(){
-    if (typeof BT === 'function') return BT;
     if (typeof window.BT === 'function') return window.BT;
+    if (typeof BT === 'function') return BT;
     return null;
   }
-  function hydrateOverallCarModels(root){
+  function hydrateOverallCarModels(root, attempt=0){
     if (!root) return;
     const renderThumb = getCarThumbRenderer();
-    if (!renderThumb) return;
+    if (!renderThumb) {
+      if (attempt < 40) setTimeout(()=>hydrateOverallCarModels(root, attempt + 1), 125);
+      return;
+    }
     const nodes = Array.from(root.querySelectorAll('.overall-car-model.image-container'));
     nodes.forEach((node)=>{
       const colorId = normalizeCarColorId(node.dataset.carcolorid || '');
@@ -177,13 +202,28 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
         rendered.classList.add('show');
         return;
       }
-      Promise.resolve(renderThumb(colorId, carId || null)).then((src)=>{
-        if (!src || node.dataset.renderKey !== key) return;
-        overallCarRenderCache.set(key, src);
-        rendered.src = src;
-        placeholder.classList.remove('show');
-        rendered.classList.add('show');
-      }).catch(()=>{});
+      Promise.resolve()
+        .then(()=>renderThumb(colorId, carId || null))
+        .then((out)=>normalizeThumbResult(out))
+        .then((src)=>{
+          if ((!src || typeof src !== 'string') && carId) {
+            return Promise.resolve(renderThumb(colorId, null)).then((fallback)=>normalizeThumbResult(fallback));
+          }
+          return src;
+        })
+        .then((src)=>{
+          if (!src || node.dataset.renderKey !== key) {
+            if (attempt < 40) setTimeout(()=>hydrateOverallCarModels(root, attempt + 1), 125);
+            return;
+          }
+          overallCarRenderCache.set(key, src);
+          rendered.src = src;
+          placeholder.classList.remove('show');
+          rendered.classList.add('show');
+        })
+        .catch(()=>{
+          if (attempt < 40) setTimeout(()=>hydrateOverallCarModels(root, attempt + 1), 125);
+        });
     });
   }
 
@@ -265,6 +305,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
         frames: safePositiveInt(payload.frames || payload.numberOfFrames || payload.raceTimeFrames || 1, 1),
         verifiedState: Number.isFinite(Number(payload.verifiedState)) ? Number(payload.verifiedState) : 0,
         carColors: String(payload.carColors || payload.CarColors || 'ffffff8ec7ff28346a212b58').slice(0, 64),
+        carId: cleanCarId(payload.carId || payload.car || payload.carName || ''),
         updatedAt: Date.now()
       };
       const keys = Object.keys(data);
@@ -286,7 +327,8 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
           recording: normalizeReplayPayloadString(rec.recording),
           verifiedState: Number.isFinite(Number(rec.verifiedState)) ? Number(rec.verifiedState) : 0,
           frames: safePositiveInt(rec.frames, 1),
-          carColors: String(rec.carColors || 'ffffff8ec7ff28346a212b58').slice(0, 64)
+          carColors: String(rec.carColors || 'ffffff8ec7ff28346a212b58').slice(0, 64),
+          carId: cleanCarId(rec.carId || '') || null
         };
       });
     } catch {
@@ -326,7 +368,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
         name: String(entry?.name || getLastKnownName(userId) || 'Guest').slice(0, 24),
         carColors: normalizeCarColorId(entry?.carColors || 'ffffff8ec7ff28346a212b58'),
         carColorId: normalizeCarColorId(entry?.carColorId || entry?.carColors || 'ffffff8ec7ff28346a212b58'),
-        carId: cleanCarId(entry?.carId || ''),
+        carId: extractCarId(entry),
         verifiedState: Number.isFinite(Number(entry?.verifiedState)) ? Number(entry.verifiedState) : 0,
         rank,
         position: rank,
@@ -674,7 +716,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
       raceCount: Number(entry.raceCount || 0),
       totalTracks: Number(entry.totalTracks || TOTAL_TRACKS) || TOTAL_TRACKS,
       carColors: normalizeCarColorId(entry.carColors || 'ffffff8ec7ff28346a212b58'),
-      carId: String(entry.carId || '').slice(0, 64),
+      carId: extractCarId(entry),
       carColorId: normalizeCarColorId(entry.carColors || 'ffffff8ec7ff28346a212b58'),
       bestTrackId: String(entry.bestTrackId || ''),
       bestTrackRank: Number(entry.bestTrackRank || 0) || 0,
@@ -704,7 +746,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
           frames: safePositiveInt(parsedFrames || Math.round((timeMs * 60) / 1000), 1),
           verifiedState: Number.isFinite(Number(row.verifiedState)) ? Number(row.verifiedState) : 0,
           replayHash: row.replayHash || null,
-          carId: row.carId || null,
+          carId: extractCarId(row) || null,
           carColors: normalizeCarColorId(row.carColors || ''),
           createdAt: Number(row.createdAt || 0),
           id: buildRecordingId(row, bestByUser.size + 1)
@@ -779,7 +821,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
           timeMs,
           createdAt: Number(row.createdAt || 0),
           id: buildRecordingId(row, bestByTrackAndUser.size + 1),
-          carId: row.carId || null,
+          carId: extractCarId(row) || null,
           carColors: normalizeCarColorId(row.carColors || '')
         });
       }
@@ -856,7 +898,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
           entry.carColors = normalizeCarColorId(profile.carColors);
           entry.carColorId = entry.carColors;
         }
-        if (!entry.carId && profile.carId) entry.carId = String(profile.carId).slice(0, 64);
+        if (!entry.carId && profile.carId) entry.carId = cleanCarId(profile.carId);
       }));
     } catch {}
     return out.map((entry)=>({
@@ -979,6 +1021,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
   function makeUserPayload(){
     const stickyName = sanitizeDisplayName(localStorage.getItem(LAST_ACTIVE_NAME_KEY) || 'Guest');
     const stickyColors = getOrCreateInitialCarColors();
+    const stickyCarId = cleanCarId(localStorage.getItem(LAST_ACTIVE_CAR_ID_KEY) || '');
     const stickyAccountId = String(localStorage.getItem('polytrack-active-account-id') || guestAccountId || '').slice(0,128);
     const accountId = resolveProfileAccountId({ name: stickyName, nickname: stickyName, carColors: stickyColors, accountId: stickyAccountId }, stickyAccountId);
     return {
@@ -992,6 +1035,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
       nickname: stickyName,
       carColors: stickyColors,
       CarColors: stickyColors,
+      carId: stickyCarId || null,
       isVerifier:false,
       IsVerifier:false,
       total:1,
@@ -1026,14 +1070,14 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
       uploadId: resolvedUploadId,
       success: true,
       verifiedState: 0,
-      entry: sourceUser || normalizedEntries[0] || null,
+      entry: sourceUser || (isPost ? null : (normalizedEntries[0] || null)),
       userEntry: null
     };
     if (sourceUser) {
       const sourceId = safeRecordingId(sourceUser.id) || safeRecordingId(sourceUser.uploadId) || resolvedUploadId;
-      base.userEntry = { id: sourceId, position: displayPos, newPosition: pos, frames: sourceUser.frames || sourceUser.time?.numberOfFrames || 1 };
+      base.userEntry = { id: sourceId, position: displayPos, oldPosition: prevPos, newPosition: pos, frames: sourceUser.frames || sourceUser.time?.numberOfFrames || 1 };
     } else if (resolvedUploadId) {
-      base.userEntry = { id: resolvedUploadId, position: displayPos, newPosition: pos, frames: 1 };
+      base.userEntry = { id: resolvedUploadId, position: displayPos, oldPosition: prevPos, newPosition: pos, frames: 1 };
     }
     return base;
   }
@@ -1057,9 +1101,11 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
         const accountId = resolveProfileAccountId(payload, String(payload.userTokenHash || payload.userId || payload.accountId || guestAccountId || '').slice(0,128));
         const safeName = await enforceSafeDisplayName(payload.name || payload.nickname || localStorage.getItem(LAST_ACTIVE_NAME_KEY) || 'Guest', accountId);
         const safeColors = String(payload.carColors || payload.CarColors || localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '0,0,0,0,0,0').slice(0,64);
+        const safeCarId = cleanCarId(payload.carId || payload.car || payload.carName || localStorage.getItem(LAST_ACTIVE_CAR_ID_KEY) || '');
         try {
           localStorage.setItem(LAST_ACTIVE_NAME_KEY, safeName);
           localStorage.setItem(LAST_ACTIVE_COLORS_KEY, safeColors);
+          if (safeCarId) localStorage.setItem(LAST_ACTIVE_CAR_ID_KEY, safeCarId);
         } catch {}
         setLastKnownName(accountId, safeName);
         try { localStorage.setItem('polytrack-active-account-id', accountId); } catch {}
@@ -1070,6 +1116,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
             if (String(row.accountId||row.userId||'') === String(accountId)) {
               row.name = safeName;
               row.carColors = safeColors;
+              if (safeCarId) row.carId = safeCarId;
               changed = true;
             }
           }
@@ -1079,7 +1126,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
           const d = await db();
           const nowTs = Date.now();
           log('info','[FB202] profiles_public.set start',{accountId});
-          await d.collection('profiles_public').doc(accountId).set({ accountId, name: safeName, carColors: safeColors, updatedAt: nowTs }, { merge: true });
+          await d.collection('profiles_public').doc(accountId).set({ accountId, name: safeName, carId: safeCarId || null, carColors: safeColors, updatedAt: nowTs }, { merge: true });
           log('info','[FB202] profiles_public.set ok',{accountId});
           try {
             const rs = await d.collection('race_results').orderBy('createdAt','desc').limit(5000).get();
@@ -1133,12 +1180,13 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
         const recData = normalizeReplayPayloadString(String(payload.recording || payload.replay || payload.replayData || payload.data || ''));
         const frames = safePositiveInt(payload.frames || payload.numberOfFrames || payload.raceTimeFrames || 1, 1);
         const recColors = String(payload.carColors || payload.CarColors || localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '').slice(0,64) || null;
-        writeRecordingStore(recId, { recording: recData, frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: recColors || undefined });
-        log('info','[FB211] recordings POST normalized',{recordingId:recId,frames,bytes:recData.length,carColors:recColors});
+        const recCarId = cleanCarId(payload.carId || payload.car || payload.carName || localStorage.getItem(LAST_ACTIVE_CAR_ID_KEY) || '') || null;
+        writeRecordingStore(recId, { recording: recData, frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: recColors || undefined, carId: recCarId || undefined });
+        log('info','[FB211] recordings POST normalized',{recordingId:recId,frames,bytes:recData.length,carColors:recColors,carId:recCarId});
         try {
           const d = await db();
           const q = await d.collection('race_results').where('uploadId','==',recId).limit(10).get();
-          await Promise.all((q.docs||[]).map((doc)=>doc.ref.set({ replay: recData, raceTimeFrames: frames, carColors: recColors || doc.data()?.carColors || null }, { merge:true })));
+          await Promise.all((q.docs||[]).map((doc)=>doc.ref.set({ replay: recData, raceTimeFrames: frames, carColors: recColors || doc.data()?.carColors || null, carId: recCarId || doc.data()?.carId || null }, { merge:true })));
           log('info','[FB212] recordings POST upserted',{recordingId:recId,matched:(q.docs||[]).length});
         } catch (error) {
           log('warn','[FB412] recordings POST firestore upsert failed', String(error && (error.message || error)));
@@ -1158,7 +1206,8 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
             recording: normalizeReplayPayloadString(String(row.replay || '')),
             verifiedState: Number.isFinite(Number(row.verifiedState)) ? Number(row.verifiedState) : 0,
             frames: safePositiveInt(row.frames || row.raceTimeFrames || Math.round((Number(row.timeMs||0) * 60) / 1000), 1),
-            carColors: String(row.carColors || 'ffffff8ec7ff28346a212b58').slice(0,64)
+            carColors: String(row.carColors || 'ffffff8ec7ff28346a212b58').slice(0,64),
+            carId: cleanCarId(row.carId || row.car || row.carName || '') || null
           };
         });
       } catch (error) {
@@ -1226,7 +1275,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
           : (Number.isFinite(maybeTotal) && maybeTotal > 60000
               ? maybeTotal
               : (frames > 0 ? Math.round((frames * 1000) / 60) : 0)));
-    const replayData = normalizeReplayPayloadString(payload.replay || payload.replayData || payload.recording || payload.recordingData || payload.ghost || payload.ghostData || payload?.data?.replay || payload?.data?.recording || '');
+    let replayData = normalizeReplayPayloadString(payload.replay || payload.replayData || payload.recording || payload.recordingData || payload.ghost || payload.ghostData || payload?.data?.replay || payload?.data?.recording || '');
     const replaySig = String(payload.replayHash || payload.uploadId || '').slice(0,128);
     const carColors = String(payload.carColors || payload.CarColors || localStorage.getItem(LAST_ACTIVE_COLORS_KEY) || '').slice(0,64) || null;
     const mirrorSig = `${accountId}|${trackId}|${timeMs}|${frames}|${replaySig}`;
@@ -1240,10 +1289,14 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
     }
     const createdAt = Date.now();
     const uploadId = safeRecordingId(payload.uploadId) || nextUploadId();
-    const carId = String(payload.car || payload.carId || payload.carName || '').slice(0,64) || null;
-    log('info','[FB210] mirror payload normalized',{accountId,trackId,timeMs,frames,uploadId,name,carColors,hasReplay:!!replayData,replayBytes:String(replayData||'').length});
+    if (!replayData && uploadId) {
+      const storedReplay = readRecordingStore([uploadId])?.[0]?.recording || '';
+      if (storedReplay) replayData = normalizeReplayPayloadString(storedReplay);
+    }
+    const carId = cleanCarId(payload.car || payload.carId || payload.carName || localStorage.getItem(LAST_ACTIVE_CAR_ID_KEY) || '') || null;
+    log('info','[FB210] mirror payload normalized',{accountId,trackId,timeMs,frames,uploadId,name,carColors,carId,hasReplay:!!replayData,replayBytes:String(replayData||'').length});
         addLocalRaceRow({ accountId, userId: accountId, trackId, name, timeMs, frames, raceTimeFrames: frames, uploadId, replayHash: replaySig || null, replay: replayData || null, carId, carColors, createdAt, verifiedState: Number(payload.verifiedState || 0) || 0 });
-    writeRecordingStore(uploadId, { recording: replayData || '', frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: carColors || undefined });
+    writeRecordingStore(uploadId, { recording: replayData || '', frames, verifiedState: Number(payload.verifiedState||0)||0, carColors: carColors || undefined, carId: carId || undefined });
     try {
       const d = await db();
             lastMirrorSig = mirrorSig;
@@ -1275,6 +1328,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
       try {
         localStorage.setItem(LAST_ACTIVE_NAME_KEY, name);
         if (carColors) localStorage.setItem(LAST_ACTIVE_COLORS_KEY, carColors);
+        if (carId) localStorage.setItem(LAST_ACTIVE_CAR_ID_KEY, carId);
       } catch {}
       const trackSnap = await d.collection('race_results').orderBy('createdAt','desc').limit(3000).get();
       const trackRows = trackSnap.docs.map((x)=>x.data() || {});
@@ -1387,6 +1441,22 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
     setTimeout(()=>{ try { button.classList.remove('button-spawn'); } catch {} }, 760);
   }
 
+  let rankingsSyncHandle = 0;
+  function scheduleRankingsSync(button, container){
+    if (rankingsSyncHandle) {
+      cancelAnimationFrame(rankingsSyncHandle);
+      rankingsSyncHandle = 0;
+    }
+    const started = Date.now();
+    const tick = ()=>{
+      if (!button || !button.isConnected || !container || !container.isConnected) { rankingsSyncHandle = 0; return; }
+      syncRankingsButtonAnimation(button, container);
+      if (Date.now() - started > 2600 || rankingsSpawnedOnce) { rankingsSyncHandle = 0; return; }
+      rankingsSyncHandle = requestAnimationFrame(tick);
+    };
+    rankingsSyncHandle = requestAnimationFrame(tick);
+  }
+
   function syncRankingsButtonAnimation(button, container){
     if (!button || !container) return;
     const containerVisible = getComputedStyle(container).display !== 'none' && getComputedStyle(container).visibility !== 'hidden';
@@ -1417,7 +1487,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
     }
     if (!active) nativeMenuButtonsAnimating = false;
     const age = Date.now() - mainButtonsShownAt;
-    if (!rankingsSpawnedOnce && age >= 0 && age <= 650) {
+    if (!rankingsSpawnedOnce && age >= 120 && age <= 2200) {
       triggerRankedButtonSpawn(button);
       rankingsSpawnedOnce = true;
       window.__polytrackRankingsAnimated = true;
@@ -1444,6 +1514,7 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
     button.style.zIndex = '5';
     button.style.order = '999';
     syncRankingsButtonAnimation(button, container);
+    if (isElementVisible(container) && !rankingsSpawnedOnce) scheduleRankingsSync(button, container);
   }
 
   function install(){
@@ -1504,8 +1575,8 @@ const q0='7f2a',q1='b19e',q2='d44c',q3='9a01';
 
   function boot(){
     install();
-    observer.observe(document.body || document.documentElement, { childList:true, subtree:true });
-    setInterval(reconcileUI, 7000);
+    observer.observe(document.body || document.documentElement, { childList:true, subtree:true, attributes:true, attributeFilter:['class','style'] });
+    setInterval(reconcileUI, 1200);
     window.addEventListener('keydown', (event)=>{
       if (event.key === 'Escape') {
         const panel = document.getElementById('overallLeaderboardPanel');
